@@ -1,0 +1,320 @@
+package com.pharmacy.service;
+
+import com.pharmacy.dto.StockInDTO;
+import com.pharmacy.dto.StockAdjustDTO;
+import com.pharmacy.entity.Drug;
+import com.pharmacy.entity.InventoryLog;
+import com.pharmacy.entity.Prescription;
+import com.pharmacy.entity.PrescriptionItem;
+import com.pharmacy.enums.InventoryLogType;
+import com.pharmacy.exception.BusinessException;
+import com.pharmacy.exception.InvalidStatusException;
+import com.pharmacy.exception.ResourceNotFoundException;
+import com.pharmacy.repository.DrugRepository;
+import com.pharmacy.repository.InventoryLogRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class InventoryService {
+
+    private final DrugRepository drugRepository;
+    private final InventoryLogRepository inventoryLogRepository;
+
+    @Transactional
+    public boolean preoccupyStock(Prescription prescription) {
+        log.info("开始为处方[{}]预占库存", prescription.getPrescriptionNo());
+
+        List<String> drugCodes = prescription.getItems().stream()
+                .map(PrescriptionItem::getDrugCode)
+                .distinct()
+                .sorted()
+                .toList();
+
+        List<Drug> drugs = drugRepository.findByDrugCodesWithLock(drugCodes);
+
+        Map<String, Drug> drugMap = drugs.stream()
+                .collect(Collectors.toMap(Drug::getDrugCode, d -> d));
+
+        List<String> lackDrugs = new ArrayList<>();
+        Map<String, Integer> preoccupyQuantities = new HashMap<>();
+
+        for (PrescriptionItem item : prescription.getItems()) {
+            Drug drug = drugMap.get(item.getDrugCode());
+            if (drug == null) {
+                throw new ResourceNotFoundException("药品不存在: " + item.getDrugCode());
+            }
+
+            int required = item.getTotalQuantity();
+            int available = drug.getAvailableStock();
+
+            if (available < required) {
+                lackDrugs.add(String.format("%s(可用:%d, 需要:%d)",
+                        drug.getName(), available, required));
+            } else {
+                preoccupyQuantities.merge(item.getDrugCode(), required, Integer::sum);
+            }
+        }
+
+        if (!lackDrugs.isEmpty()) {
+            String lackDetails = String.join(", ", lackDrugs);
+            prescription.setLackDrugDetails(lackDetails);
+            log.warn("处方[{}]预占库存失败，缺药: {}", prescription.getPrescriptionNo(), lackDetails);
+            return false;
+        }
+
+        for (Map.Entry<String, Integer> entry : preoccupyQuantities.entrySet()) {
+            String drugCode = entry.getKey();
+            int quantity = entry.getValue();
+            Drug drug = drugMap.get(drugCode);
+
+            int beforeAvailable = drug.getAvailableStock();
+            int beforePreoccupied = drug.getPreoccupiedStock();
+
+            drug.setAvailableStock(beforeAvailable - quantity);
+            drug.setPreoccupiedStock(beforePreoccupied + quantity);
+
+            drugRepository.save(drug);
+
+            createInventoryLog(drug, InventoryLogType.PREOCCUPY, quantity,
+                    beforeAvailable, beforeAvailable - quantity,
+                    beforePreoccupied, beforePreoccupied + quantity,
+                    prescription.getPrescriptionNo(), "处方预占", null);
+        }
+
+        for (PrescriptionItem item : prescription.getItems()) {
+            item.setPreoccupied(true);
+        }
+
+        log.info("处方[{}]库存预占成功", prescription.getPrescriptionNo());
+        return true;
+    }
+
+    @Transactional
+    public void releasePreoccupyStock(Prescription prescription, String reason, String operator) {
+        log.info("释放处方[{}]的预占库存，原因: {}", prescription.getPrescriptionNo(), reason);
+
+        List<String> drugCodes = prescription.getItems().stream()
+                .filter(PrescriptionItem::getPreoccupied)
+                .map(PrescriptionItem::getDrugCode)
+                .distinct()
+                .sorted()
+                .toList();
+
+        if (drugCodes.isEmpty()) {
+            log.info("处方[{}]没有需要释放的预占库存", prescription.getPrescriptionNo());
+            return;
+        }
+
+        List<Drug> drugs = drugRepository.findByDrugCodesWithLock(drugCodes);
+        Map<String, Drug> drugMap = drugs.stream()
+                .collect(Collectors.toMap(Drug::getDrugCode, d -> d));
+
+        Map<String, Integer> releaseQuantities = new HashMap<>();
+        for (PrescriptionItem item : prescription.getItems()) {
+            if (Boolean.TRUE.equals(item.getPreoccupied())) {
+                releaseQuantities.merge(item.getDrugCode(), item.getTotalQuantity(), Integer::sum);
+                item.setPreoccupied(false);
+            }
+        }
+
+        for (Map.Entry<String, Integer> entry : releaseQuantities.entrySet()) {
+            String drugCode = entry.getKey();
+            int quantity = entry.getValue();
+            Drug drug = drugMap.get(drugCode);
+
+            if (drug == null) {
+                log.warn("释放预占时药品不存在: {}", drugCode);
+                continue;
+            }
+
+            int beforeAvailable = drug.getAvailableStock();
+            int beforePreoccupied = drug.getPreoccupiedStock();
+
+            drug.setAvailableStock(beforeAvailable + quantity);
+            drug.setPreoccupiedStock(Math.max(0, beforePreoccupied - quantity));
+
+            drugRepository.save(drug);
+
+            createInventoryLog(drug, InventoryLogType.RELEASE, quantity,
+                    beforeAvailable, beforeAvailable + quantity,
+                    beforePreoccupied, Math.max(0, beforePreoccupied - quantity),
+                    prescription.getPrescriptionNo(), reason, operator);
+        }
+
+        log.info("处方[{}]预占库存释放完成", prescription.getPrescriptionNo());
+    }
+
+    @Transactional
+    public void dispenseStock(Prescription prescription, String dispensedBy) {
+        log.info("为处方[{}]执行发药扣减库存", prescription.getPrescriptionNo());
+
+        List<String> drugCodes = prescription.getItems().stream()
+                .filter(PrescriptionItem::getPreoccupied)
+                .map(PrescriptionItem::getDrugCode)
+                .distinct()
+                .sorted()
+                .toList();
+
+        List<Drug> drugs = drugRepository.findByDrugCodesWithLock(drugCodes);
+        Map<String, Drug> drugMap = drugs.stream()
+                .collect(Collectors.toMap(Drug::getDrugCode, d -> d));
+
+        for (PrescriptionItem item : prescription.getItems()) {
+            if (!Boolean.TRUE.equals(item.getPreoccupied())) {
+                throw new InvalidStatusException(
+                        String.format("药品[%s]未预占，无法发药", item.getDrugName()));
+            }
+
+            Drug drug = drugMap.get(item.getDrugCode());
+            if (drug == null) {
+                throw new ResourceNotFoundException("药品不存在: " + item.getDrugCode());
+            }
+
+            if (drug.getPreoccupiedStock() < item.getTotalQuantity()) {
+                throw new BusinessException(409,
+                        String.format("发药时预占数据不一致: 药品[%s]预占库存(%d)小于处方数量(%d)，" +
+                                        "可能已被盘点修正，请先取消处方后重新提交",
+                                drug.getName(), drug.getPreoccupiedStock(), item.getTotalQuantity()));
+            }
+        }
+
+        Map<String, Integer> dispenseQuantities = new HashMap<>();
+        for (PrescriptionItem item : prescription.getItems()) {
+            dispenseQuantities.merge(item.getDrugCode(), item.getTotalQuantity(), Integer::sum);
+        }
+
+        for (Map.Entry<String, Integer> entry : dispenseQuantities.entrySet()) {
+            String drugCode = entry.getKey();
+            int quantity = entry.getValue();
+            Drug drug = drugMap.get(drugCode);
+
+            int beforeAvailable = drug.getAvailableStock();
+            int beforePreoccupied = drug.getPreoccupiedStock();
+
+            drug.setPreoccupiedStock(beforePreoccupied - quantity);
+
+            drugRepository.save(drug);
+
+            createInventoryLog(drug, InventoryLogType.DISPENSE, quantity,
+                    beforeAvailable, beforeAvailable,
+                    beforePreoccupied, beforePreoccupied - quantity,
+                    prescription.getPrescriptionNo(), "发药扣减", dispensedBy);
+        }
+
+        for (PrescriptionItem item : prescription.getItems()) {
+            item.setDispensed(true);
+            item.setPreoccupied(false);
+        }
+
+        log.info("处方[{}]发药扣减完成", prescription.getPrescriptionNo());
+    }
+
+    @Transactional
+    public Drug stockIn(StockInDTO dto) {
+        log.info("药品[{}]入库，数量: {}", dto.getDrugCode(), dto.getQuantity());
+
+        Drug drug = drugRepository.findByDrugCodeWithLock(dto.getDrugCode())
+                .orElseThrow(() -> new ResourceNotFoundException("药品不存在: " + dto.getDrugCode()));
+
+        int beforeAvailable = drug.getAvailableStock();
+        int beforePreoccupied = drug.getPreoccupiedStock();
+
+        drug.setAvailableStock(beforeAvailable + dto.getQuantity());
+        drugRepository.save(drug);
+
+        createInventoryLog(drug, InventoryLogType.STOCK_IN, dto.getQuantity(),
+                beforeAvailable, beforeAvailable + dto.getQuantity(),
+                beforePreoccupied, beforePreoccupied,
+                null, dto.getRemark(), dto.getOperator());
+
+        log.info("药品[{}]入库完成，入库前: {}, 入库后: {}",
+                drug.getName(), beforeAvailable, drug.getAvailableStock());
+
+        return drug;
+    }
+
+    @Transactional
+    public Drug adjustStock(StockAdjustDTO dto) {
+        log.info("盘点修正药品[{}]库存，修正后实际库存: {}", dto.getDrugCode(), dto.getActualStock());
+
+        if (dto.getActualStock() < 0) {
+            throw new BusinessException("库存不能为负数");
+        }
+
+        Drug drug = drugRepository.findByDrugCodeWithLock(dto.getDrugCode())
+                .orElseThrow(() -> new ResourceNotFoundException("药品不存在: " + dto.getDrugCode()));
+
+        int currentActual = drug.getActualStock();
+        int adjustQuantity = dto.getActualStock() - currentActual;
+
+        if (adjustQuantity == 0) {
+            log.info("药品[{}]实际库存无变化，无需修正", drug.getName());
+            return drug;
+        }
+
+        int beforeAvailable = drug.getAvailableStock();
+        int beforePreoccupied = drug.getPreoccupiedStock();
+
+        int newAvailable = beforeAvailable + adjustQuantity;
+        if (newAvailable < 0) {
+            newAvailable = 0;
+            drug.setPreoccupiedStock(dto.getActualStock());
+        } else {
+            drug.setAvailableStock(newAvailable);
+        }
+
+        drugRepository.save(drug);
+
+        String remark = String.format("盘点修正，原实际库存: %d, 修正后: %d, 差额: %+d. %s",
+                currentActual, dto.getActualStock(), adjustQuantity,
+                dto.getRemark() != null ? dto.getRemark() : "");
+
+        createInventoryLog(drug, InventoryLogType.ADJUST, adjustQuantity,
+                beforeAvailable, drug.getAvailableStock(),
+                beforePreoccupied, drug.getPreoccupiedStock(),
+                null, remark, dto.getOperator());
+
+        log.info("药品[{}]盘点修正完成", drug.getName());
+
+        return drug;
+    }
+
+    private void createInventoryLog(Drug drug, InventoryLogType type, int quantity,
+                                    int beforeAvailable, int afterAvailable,
+                                    int beforePreoccupied, int afterPreoccupied,
+                                    String prescriptionNo, String remark, String operator) {
+        InventoryLog log = new InventoryLog();
+        log.setDrugCode(drug.getDrugCode());
+        log.setDrugName(drug.getName());
+        log.setLogType(type);
+        log.setQuantity(quantity);
+        log.setBeforeAvailableStock(beforeAvailable);
+        log.setAfterAvailableStock(afterAvailable);
+        log.setBeforePreoccupiedStock(beforePreoccupied);
+        log.setAfterPreoccupiedStock(afterPreoccupied);
+        log.setPrescriptionNo(prescriptionNo);
+        log.setRemark(remark);
+        log.setOperator(operator);
+        inventoryLogRepository.save(log);
+    }
+
+    public Drug getDrug(String drugCode) {
+        return drugRepository.findByDrugCode(drugCode)
+                .orElseThrow(() -> new ResourceNotFoundException("药品不存在: " + drugCode));
+    }
+
+    public List<Drug> getAllDrugs() {
+        return drugRepository.findAll();
+    }
+}
