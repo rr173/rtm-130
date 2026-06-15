@@ -21,4 +21,18 @@ public interface PrescriptionItemRepository extends JpaRepository<PrescriptionIt
             @Param("patientId") String patientId,
             @Param("drugCode") String drugCode,
             @Param("startTime") java.time.LocalDateTime startTime);
+
+    @Query("SELECT pi FROM PrescriptionItem pi JOIN pi.prescription p JOIN Drug d ON pi.drugCode = d.drugCode " +
+           "WHERE p.patientId = :patientId " +
+           "AND p.status NOT IN ('CANCELLED', 'REVIEW_BLOCKED') " +
+           "AND p.createdAt >= :startTime " +
+           "AND (d.ingredient LIKE CONCAT('%', :ingredient, '%') " +
+           "     OR d.ingredient LIKE CONCAT(:ingredient, '%') " +
+           "     OR d.ingredient LIKE CONCAT('%', :ingredient) " +
+           "     OR d.ingredient = :ingredient) " +
+           "ORDER BY p.createdAt DESC")
+    List<PrescriptionItem> findRecentItemsForPatientAndIngredient(
+            @Param("patientId") String patientId,
+            @Param("ingredient") String ingredient,
+            @Param("startTime") java.time.LocalDateTime startTime);
 }

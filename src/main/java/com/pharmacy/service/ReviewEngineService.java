@@ -16,6 +16,8 @@ import com.pharmacy.repository.ContraindicationRepository;
 import com.pharmacy.repository.DoctorRepository;
 import com.pharmacy.repository.DrugRepository;
 import com.pharmacy.repository.PrescriptionItemRepository;
+import com.pharmacy.repository.PrescriptionRepository;
+import com.pharmacy.repository.ReviewRecordRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -158,6 +160,7 @@ public class ReviewEngineService {
         List<String> warnings = new ArrayList<>();
         Set<String> currentIngredients = new HashSet<>();
         Map<String, String> ingredientToDrugMap = new HashMap<>();
+        Set<String> warnedIngredients = new HashSet<>();
 
         for (PrescriptionItem item : prescription.getItems()) {
             Drug drug = drugRepository.findByDrugCode(item.getDrugCode()).orElse(null);
@@ -177,14 +180,17 @@ public class ReviewEngineService {
                         ingredientToDrugMap.put(trimmed, drug.getName());
                     }
 
-                    List<PrescriptionItem> recentItems = prescriptionItemRepository
-                            .findRecentItemsForPatientAndDrug(
-                                    prescription.getPatientId(), item.getDrugCode(), startTime);
+                    if (!warnedIngredients.contains(trimmed)) {
+                        List<PrescriptionItem> recentItems = prescriptionItemRepository
+                                .findRecentItemsForPatientAndIngredient(
+                                        prescription.getPatientId(), trimmed, startTime);
 
-                    if (!recentItems.isEmpty()) {
-                        warnings.add(String.format("患者24小时内已有含[%s]成分的处方", trimmed));
-                        result.setDrugCode(drug.getDrugCode());
-                        result.setDrugName(drug.getName());
+                        if (!recentItems.isEmpty()) {
+                            warnings.add(String.format("患者24小时内已有含[%s]成分的处方", trimmed));
+                            result.setDrugCode(drug.getDrugCode());
+                            result.setDrugName(drug.getName());
+                            warnedIngredients.add(trimmed);
+                        }
                     }
                 }
             }

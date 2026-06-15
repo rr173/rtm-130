@@ -3,6 +3,8 @@ package com.pharmacy.entity;
 import com.pharmacy.enums.UsageType;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.math.BigDecimal;
 
@@ -17,6 +19,8 @@ public class PrescriptionItem {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "prescription_id", nullable = false)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Prescription prescription;
 
     @Column(nullable = false, length = 50)

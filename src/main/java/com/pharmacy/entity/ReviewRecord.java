@@ -3,6 +3,8 @@ package com.pharmacy.entity;
 import com.pharmacy.enums.ReviewResultType;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
@@ -18,6 +20,8 @@ public class ReviewRecord {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "prescription_id", nullable = false)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Prescription prescription;
 
     @Column(nullable = false, length = 100)

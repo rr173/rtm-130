@@ -159,10 +159,19 @@ public class InventoryService {
     public void dispenseStock(Prescription prescription, String dispensedBy) {
         log.info("为处方[{}]执行发药扣减库存", prescription.getPrescriptionNo());
 
-        List<String> drugCodes = prescription.getItems().stream()
-                .filter(PrescriptionItem::getPreoccupied)
-                .map(PrescriptionItem::getDrugCode)
-                .distinct()
+        for (PrescriptionItem item : prescription.getItems()) {
+            if (!Boolean.TRUE.equals(item.getPreoccupied())) {
+                throw new InvalidStatusException(
+                        String.format("药品[%s]未预占，无法发药", item.getDrugName()));
+            }
+        }
+
+        Map<String, Integer> dispenseQuantities = new HashMap<>();
+        for (PrescriptionItem item : prescription.getItems()) {
+            dispenseQuantities.merge(item.getDrugCode(), item.getTotalQuantity(), Integer::sum);
+        }
+
+        List<String> drugCodes = dispenseQuantities.keySet().stream()
                 .sorted()
                 .toList();
 
@@ -170,28 +179,29 @@ public class InventoryService {
         Map<String, Drug> drugMap = drugs.stream()
                 .collect(Collectors.toMap(Drug::getDrugCode, d -> d));
 
-        for (PrescriptionItem item : prescription.getItems()) {
-            if (!Boolean.TRUE.equals(item.getPreoccupied())) {
-                throw new InvalidStatusException(
-                        String.format("药品[%s]未预占，无法发药", item.getDrugName()));
-            }
+        for (Map.Entry<String, Integer> entry : dispenseQuantities.entrySet()) {
+            String drugCode = entry.getKey();
+            int totalQuantity = entry.getValue();
 
-            Drug drug = drugMap.get(item.getDrugCode());
+            Drug drug = drugMap.get(drugCode);
             if (drug == null) {
-                throw new ResourceNotFoundException("药品不存在: " + item.getDrugCode());
+                throw new ResourceNotFoundException("药品不存在: " + drugCode);
             }
 
-            if (drug.getPreoccupiedStock() < item.getTotalQuantity()) {
+            if (drug.getPreoccupiedStock() < totalQuantity) {
                 throw new BusinessException(409,
-                        String.format("发药时预占数据不一致: 药品[%s]预占库存(%d)小于处方数量(%d)，" +
+                        String.format("发药时预占数据不一致: 药品[%s]预占库存(%d)小于处方总数量(%d)，" +
                                         "可能已被盘点修正，请先取消处方后重新提交",
-                                drug.getName(), drug.getPreoccupiedStock(), item.getTotalQuantity()));
+                                drug.getName(), drug.getPreoccupiedStock(), totalQuantity));
             }
-        }
 
-        Map<String, Integer> dispenseQuantities = new HashMap<>();
-        for (PrescriptionItem item : prescription.getItems()) {
-            dispenseQuantities.merge(item.getDrugCode(), item.getTotalQuantity(), Integer::sum);
+            int actualStock = drug.getAvailableStock() + drug.getPreoccupiedStock();
+            if (actualStock < totalQuantity) {
+                throw new BusinessException(409,
+                        String.format("发药时实际库存不足: 药品[%s]实际库存(%d)小于处方总数量(%d)，" +
+                                        "请先取消处方后重新提交",
+                                drug.getName(), actualStock, totalQuantity));
+            }
         }
 
         for (Map.Entry<String, Integer> entry : dispenseQuantities.entrySet()) {
@@ -269,6 +279,7 @@ public class InventoryService {
         int newAvailable = beforeAvailable + adjustQuantity;
         if (newAvailable < 0) {
             newAvailable = 0;
+            drug.setAvailableStock(0);
             drug.setPreoccupiedStock(dto.getActualStock());
         } else {
             drug.setAvailableStock(newAvailable);
