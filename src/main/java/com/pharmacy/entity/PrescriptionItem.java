@@ -36,7 +36,7 @@ public class PrescriptionItem {
     private String doseUnit;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
+    @Column(name = "usage_type", nullable = false, length = 30)
     private UsageType usage;
 
     @Column(nullable = false, length = 20)
