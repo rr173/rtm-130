@@ -144,7 +144,7 @@ public class TempHumidityService {
         if (!monitoringPointRepository.existsByPointCode(pointCode)) {
             throw new ResourceNotFoundException("监控点不存在: " + pointCode);
         }
-        return readingRepository.findTopNByPointCodeOrderByCollectTimeDesc(pointCode, limit).stream()
+        return readingRepository.findRecentByPointCode(pointCode, org.springframework.data.domain.PageRequest.of(0, limit)).stream()
                 .map(this::convertToDTO)
                 .collect(Collectors.toList());
     }

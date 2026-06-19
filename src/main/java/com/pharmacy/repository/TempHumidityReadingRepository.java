@@ -1,6 +1,7 @@
 package com.pharmacy.repository;
 
 import com.pharmacy.entity.TempHumidityReading;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -14,7 +15,8 @@ import java.util.Optional;
 @Repository
 public interface TempHumidityReadingRepository extends JpaRepository<TempHumidityReading, Long> {
 
-    List<TempHumidityReading> findTopNByPointCodeOrderByCollectTimeDesc(String pointCode, int n);
+    @Query("SELECT r FROM TempHumidityReading r WHERE r.pointCode = :pointCode ORDER BY r.collectTime DESC")
+    List<TempHumidityReading> findRecentByPointCode(@Param("pointCode") String pointCode, Pageable pageable);
 
     @Query("SELECT r FROM TempHumidityReading r WHERE r.pointCode = :pointCode " +
            "AND r.collectTime BETWEEN :startTime AND :endTime ORDER BY r.collectTime ASC")
