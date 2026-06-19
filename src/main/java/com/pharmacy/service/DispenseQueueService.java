@@ -5,6 +5,7 @@ import com.pharmacy.entity.DispenseQueueItem;
 import com.pharmacy.entity.DispenseRecord;
 import com.pharmacy.entity.DispensingWindow;
 import com.pharmacy.entity.Prescription;
+import com.pharmacy.enums.DispenseChannel;
 import com.pharmacy.enums.DispensingWindowStatus;
 import com.pharmacy.enums.PrescriptionStatus;
 import com.pharmacy.enums.PrescriptionType;
@@ -31,7 +32,10 @@ import java.util.*;
 @RequiredArgsConstructor
 public class DispenseQueueService {
 
-    private static final int AVERAGE_DISPENSE_MINUTES = 5;
+    private static final int FAST_CHANNEL_DRUG_THRESHOLD = 3;
+    private static final int CROSS_CHANNEL_QUEUE_THRESHOLD = 3;
+    private static final int AVERAGE_FAST_DISPENSE_MINUTES = 2;
+    private static final int AVERAGE_NORMAL_DISPENSE_MINUTES = 6;
     private static final int TIMEOUT_MINUTES = 15;
     private static final int MAX_RETURN_COUNT = 3;
 
@@ -61,9 +65,14 @@ public class DispenseQueueService {
                     throw new BusinessException("处方[" + prescriptionNo + "]已在排队队列中");
                 });
 
+        int drugItemCount = prescription.getItems() != null ? prescription.getItems().size() : 0;
+        DispenseChannel channel = DispenseChannel.classifyByDrugCount(drugItemCount);
+
         DispenseQueueItem item = new DispenseQueueItem();
         item.setPrescriptionNo(prescriptionNo);
         item.setPrescriptionType(prescription.getType());
+        item.setChannel(channel);
+        item.setDrugItemCount(drugItemCount);
         item.setEnqueueTime(LocalDateTime.now());
         item.setStatus(QueueItemStatus.WAITING);
         item.setReturnCount(0);
@@ -71,7 +80,8 @@ public class DispenseQueueService {
                 ? PRIORITY_NEW_EMERGENCY : PRIORITY_NEW_NORMAL);
 
         item = queueItemRepository.save(item);
-        log.info("处方[{}]已加入队列，排队类型: {}", prescriptionNo, prescription.getType().getDescription());
+        log.info("处方[{}]已加入[{}]，药品数: {}，类型: {}",
+                prescriptionNo, channel.getDescription(), drugItemCount, prescription.getType().getDescription());
 
         notifyIdleWindows();
         return enrichWithPosition(item);
@@ -91,11 +101,14 @@ public class DispenseQueueService {
             throw new BusinessException("窗口[" + windowNo + "]正在处理处方[" + window.getCurrentPrescriptionNo() + "]，请先完成或释放");
         }
 
-        DispenseQueueItem nextItem = queueItemRepository.findNextWaiting()
+        DispenseChannel serviceChannel = window.getServiceChannel();
+        List<DispenseChannel> targetChannels = determineTargetChannels(serviceChannel);
+
+        DispenseQueueItem nextItem = queueItemRepository.findNextWaitingByChannels(targetChannels)
                 .orElse(null);
 
         if (nextItem == null) {
-            log.info("队列为空，窗口[{}]进入等待状态", windowNo);
+            log.info("队列为空（目标通道: {}），窗口[{}]进入等待状态", targetChannels, windowNo);
             throw new BusinessException("当前排队队列为空，没有可领取的处方");
         }
 
@@ -119,14 +132,55 @@ public class DispenseQueueService {
         prescriptionRepository.save(prescription);
 
         window.setStatus(DispensingWindowStatus.BUSY);
+        window.setCurrentServingChannel(nextItem.getChannel());
         window.setCurrentPrescriptionNo(nextItem.getPrescriptionNo());
         window.setCurrentPharmacistId(pharmacistId);
         window.setCurrentPharmacistName(pharmacistName);
         window.setDispenseStartTime(LocalDateTime.now());
         windowRepository.save(window);
 
-        log.info("窗口[{}]已领取处方[{}]，配药师: {}", windowNo, nextItem.getPrescriptionNo(), pharmacistName);
+        log.info("窗口[{}]({})已领取处方[{}]({})，配药师: {}",
+                windowNo, serviceChannel.getDescription(),
+                nextItem.getPrescriptionNo(), nextItem.getChannel().getDescription(),
+                pharmacistName);
         return enrichWithPosition(nextItem);
+    }
+
+    private List<DispenseChannel> determineTargetChannels(DispenseChannel serviceChannel) {
+        if (serviceChannel != DispenseChannel.BOTH) {
+            return Collections.singletonList(serviceChannel);
+        }
+
+        long fastWaiting = queueItemRepository.countWaitingByChannel(DispenseChannel.FAST);
+        long normalWaiting = queueItemRepository.countWaitingByChannel(DispenseChannel.NORMAL);
+
+        List<DispenseChannel> channels = new ArrayList<>();
+
+        if (fastWaiting == 0 && normalWaiting > CROSS_CHANNEL_QUEUE_THRESHOLD) {
+            channels.add(DispenseChannel.NORMAL);
+            log.debug("双通道调度: 快速通道为空，普通通道排队{}人，优先处理普通通道", normalWaiting);
+        } else if (normalWaiting == 0 && fastWaiting > CROSS_CHANNEL_QUEUE_THRESHOLD) {
+            channels.add(DispenseChannel.FAST);
+            log.debug("双通道调度: 普通通道为空，快速通道排队{}人，优先处理快速通道", fastWaiting);
+        } else {
+            channels.add(DispenseChannel.FAST);
+            channels.add(DispenseChannel.NORMAL);
+        }
+
+        return channels;
+    }
+
+    public String getCrossChannelStatus() {
+        long fastWaiting = queueItemRepository.countWaitingByChannel(DispenseChannel.FAST);
+        long normalWaiting = queueItemRepository.countWaitingByChannel(DispenseChannel.NORMAL);
+
+        if (fastWaiting == 0 && normalWaiting > CROSS_CHANNEL_QUEUE_THRESHOLD) {
+            return "已触发跨通道调度：快速通道为空，双通道窗口将协助处理普通通道（当前排队" + normalWaiting + "人）";
+        } else if (normalWaiting == 0 && fastWaiting > CROSS_CHANNEL_QUEUE_THRESHOLD) {
+            return "已触发跨通道调度：普通通道为空，双通道窗口将协助处理快速通道（当前排队" + fastWaiting + "人）";
+        } else {
+            return "未触发跨通道调度：快速通道" + fastWaiting + "人排队，普通通道" + normalWaiting + "人排队";
+        }
     }
 
     @Transactional
@@ -143,6 +197,7 @@ public class DispenseQueueService {
         String prescriptionNo = window.getCurrentPrescriptionNo();
         String pharmacistId = window.getCurrentPharmacistId();
         String pharmacistName = window.getCurrentPharmacistName();
+        DispenseChannel channel = window.getCurrentServingChannel();
         LocalDateTime startTime = window.getDispenseStartTime();
         LocalDateTime now = LocalDateTime.now();
 
@@ -162,6 +217,7 @@ public class DispenseQueueService {
         DispenseRecord record = new DispenseRecord();
         record.setWindowNo(windowNo);
         record.setPrescriptionNo(prescriptionNo);
+        record.setChannel(channel);
         record.setPharmacistId(pharmacistId);
         record.setPharmacistName(pharmacistName);
         record.setStartTime(startTime);
@@ -172,7 +228,9 @@ public class DispenseQueueService {
         resetWindowToIdle(window);
         windowRepository.save(window);
 
-        log.info("窗口[{}]配药完成，处方[{}]已流转到发药确认环节", windowNo, prescriptionNo);
+        log.info("窗口[{}]配药完成，处方[{}]({})耗时{}秒，已流转到发药确认环节",
+                windowNo, prescriptionNo, channel != null ? channel.getDescription() : "未知",
+                record.getDurationSeconds());
 
         tryAutoClaimNext(windowNo, pharmacistId, pharmacistName);
         return WindowDTO.fromEntity(window);
@@ -272,11 +330,13 @@ public class DispenseQueueService {
         prescription.setStatus(PrescriptionStatus.PREOCCUPIED);
         prescriptionRepository.save(prescription);
 
-        log.info("处方[{}]已退回队列头部，退回次数: {}", prescriptionNo, queueItem.getReturnCount());
+        log.info("处方[{}]已退回[{}]队列头部，退回次数: {}",
+                prescriptionNo, queueItem.getChannel().getDescription(), queueItem.getReturnCount());
     }
 
     private void resetWindowToIdle(DispensingWindow window) {
         window.setStatus(DispensingWindowStatus.IDLE);
+        window.setCurrentServingChannel(null);
         window.setCurrentPrescriptionNo(null);
         window.setCurrentPharmacistId(null);
         window.setCurrentPharmacistName(null);
@@ -356,6 +416,24 @@ public class DispenseQueueService {
         return WindowDTO.fromEntity(window);
     }
 
+    @Transactional
+    public WindowDTO updateWindowChannel(String windowNo, DispenseChannel serviceChannel) {
+        log.info("更新窗口[{}]服务通道为: {}", windowNo, serviceChannel.getDescription());
+
+        DispensingWindow window = windowRepository.findByWindowNoWithLock(windowNo)
+                .orElseThrow(() -> new ResourceNotFoundException("窗口不存在: " + windowNo));
+
+        if (window.getStatus() == DispensingWindowStatus.BUSY) {
+            throw new BusinessException("窗口[" + windowNo + "]正在处理处方，请先完成后再修改通道配置");
+        }
+
+        window.setServiceChannel(serviceChannel);
+        windowRepository.save(window);
+
+        log.info("窗口[{}]通道配置已更新为: {}", windowNo, serviceChannel.getDescription());
+        return WindowDTO.fromEntity(window);
+    }
+
     public List<WindowDTO> getAllWindows() {
         return windowRepository.findAllByOrderByWindowNoAsc().stream()
                 .map(WindowDTO::fromEntity)
@@ -372,12 +450,36 @@ public class DispenseQueueService {
         List<DispenseQueueItem> waitingItems = queueItemRepository.findAllWaitingOrdered();
         List<QueueItemDTO> result = new ArrayList<>();
 
+        int fastPos = 0;
+        int normalPos = 0;
+        for (DispenseQueueItem item : waitingItems) {
+            QueueItemDTO dto = QueueItemDTO.fromEntity(item);
+            if (item.getChannel() == DispenseChannel.FAST) {
+                fastPos++;
+                dto.setPosition(fastPos);
+                dto.setEstimatedWaitMinutes(fastPos * AVERAGE_FAST_DISPENSE_MINUTES);
+            } else {
+                normalPos++;
+                dto.setPosition(normalPos);
+                dto.setEstimatedWaitMinutes(normalPos * AVERAGE_NORMAL_DISPENSE_MINUTES);
+            }
+            result.add(dto);
+        }
+
+        return result;
+    }
+
+    public List<QueueItemDTO> getQueueListByChannel(DispenseChannel channel) {
+        List<DispenseQueueItem> waitingItems = queueItemRepository.findAllWaitingOrderedByChannel(channel);
+        List<QueueItemDTO> result = new ArrayList<>();
+
+        int avgMinutes = channel == DispenseChannel.FAST ? AVERAGE_FAST_DISPENSE_MINUTES : AVERAGE_NORMAL_DISPENSE_MINUTES;
         int position = 0;
         for (DispenseQueueItem item : waitingItems) {
             position++;
             QueueItemDTO dto = QueueItemDTO.fromEntity(item);
             dto.setPosition(position);
-            dto.setEstimatedWaitMinutes(position * AVERAGE_DISPENSE_MINUTES);
+            dto.setEstimatedWaitMinutes(position * avgMinutes);
             result.add(dto);
         }
 
@@ -385,13 +487,20 @@ public class DispenseQueueService {
     }
 
     public QueuePositionDTO getQueuePosition(String prescriptionNo) {
-        List<DispenseQueueItem> waitingItems = queueItemRepository.findAllWaitingOrdered();
+        DispenseQueueItem targetItem = queueItemRepository
+                .findByPrescriptionNoAndStatus(prescriptionNo, QueueItemStatus.WAITING)
+                .orElse(null);
 
-        int position = 0;
-        for (DispenseQueueItem item : waitingItems) {
-            position++;
-            if (item.getPrescriptionNo().equals(prescriptionNo)) {
-                return new QueuePositionDTO(prescriptionNo, position, position * AVERAGE_DISPENSE_MINUTES, waitingItems.size());
+        if (targetItem != null) {
+            List<DispenseQueueItem> waitingItems = queueItemRepository.findAllWaitingOrderedByChannel(targetItem.getChannel());
+            int avgMinutes = targetItem.getChannel() == DispenseChannel.FAST
+                    ? AVERAGE_FAST_DISPENSE_MINUTES : AVERAGE_NORMAL_DISPENSE_MINUTES;
+            int position = 0;
+            for (DispenseQueueItem item : waitingItems) {
+                position++;
+                if (item.getPrescriptionNo().equals(prescriptionNo)) {
+                    return new QueuePositionDTO(prescriptionNo, position, position * avgMinutes, waitingItems.size());
+                }
             }
         }
 
@@ -400,7 +509,8 @@ public class DispenseQueueService {
                 .orElse(null);
 
         if (processingItem != null) {
-            return new QueuePositionDTO(prescriptionNo, 0, 0, waitingItems.size());
+            long channelWaiting = queueItemRepository.countWaitingByChannel(processingItem.getChannel());
+            return new QueuePositionDTO(prescriptionNo, 0, 0, (int) channelWaiting);
         }
 
         throw new ResourceNotFoundException("处方[" + prescriptionNo + "]不在排队队列中");
@@ -425,6 +535,8 @@ public class DispenseQueueService {
             WindowStatisticsDTO dto = new WindowStatisticsDTO();
             dto.setWindowNo(window.getWindowNo());
             dto.setWindowName(window.getWindowName());
+            dto.setServiceChannel(window.getServiceChannel());
+            dto.setServiceChannelDescription(window.getServiceChannel().getDescription());
 
             Object[] stats = statsMap.get(window.getWindowNo());
             if (stats != null) {
@@ -441,6 +553,37 @@ public class DispenseQueueService {
         }
 
         return result;
+    }
+
+    public ChannelStatisticsDTO getChannelStatistics(DispenseChannel channel, LocalDate date) {
+        LocalDate targetDate = date != null ? date : LocalDate.now();
+        LocalDateTime startTime = targetDate.atStartOfDay();
+        LocalDateTime endTime = targetDate.atTime(LocalTime.MAX);
+
+        ChannelStatisticsDTO dto = new ChannelStatisticsDTO();
+        dto.setChannel(channel);
+        dto.setChannelDescription(channel.getDescription());
+
+        dto.setCurrentWaitingCount(queueItemRepository.countWaitingByChannel(channel));
+        dto.setTodayProcessedCount(recordRepository.countByChannelAndDateRange(channel, startTime, endTime));
+
+        Double avgSec = recordRepository.avgDurationSecondsByChannelAndDateRange(channel, startTime, endTime);
+        dto.setAvgDurationSeconds(avgSec != null ? avgSec : 0.0);
+        dto.setAvgDurationFormatted(formatDuration(avgSec != null ? avgSec : 0.0));
+
+        return dto;
+    }
+
+    public ChannelOverviewDTO getChannelOverview() {
+        LocalDate today = LocalDate.now();
+
+        ChannelOverviewDTO overview = new ChannelOverviewDTO();
+        overview.setFastChannel(getChannelStatistics(DispenseChannel.FAST, today));
+        overview.setNormalChannel(getChannelStatistics(DispenseChannel.NORMAL, today));
+        overview.setWindows(getAllWindows());
+        overview.setCrossChannelStatus(getCrossChannelStatus());
+
+        return overview;
     }
 
     public List<QueueStatisticsDTO> getQueueStatistics(LocalDate date) {
@@ -504,11 +647,13 @@ public class DispenseQueueService {
     private QueueItemDTO enrichWithPosition(DispenseQueueItem item) {
         QueueItemDTO dto = QueueItemDTO.fromEntity(item);
         if (item.getStatus() == QueueItemStatus.WAITING) {
-            List<DispenseQueueItem> waitingItems = queueItemRepository.findAllWaitingOrdered();
+            List<DispenseQueueItem> waitingItems = queueItemRepository.findAllWaitingOrderedByChannel(item.getChannel());
+            int avgMinutes = item.getChannel() == DispenseChannel.FAST
+                    ? AVERAGE_FAST_DISPENSE_MINUTES : AVERAGE_NORMAL_DISPENSE_MINUTES;
             for (int i = 0; i < waitingItems.size(); i++) {
                 if (waitingItems.get(i).getId().equals(item.getId())) {
                     dto.setPosition(i + 1);
-                    dto.setEstimatedWaitMinutes((i + 1) * AVERAGE_DISPENSE_MINUTES);
+                    dto.setEstimatedWaitMinutes((i + 1) * avgMinutes);
                     break;
                 }
             }

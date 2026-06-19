@@ -1,6 +1,7 @@
 package com.pharmacy.dto;
 
 import com.pharmacy.enums.DispenseChannel;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -8,13 +9,11 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class WindowStatisticsDTO {
+public class WindowChannelConfigDTO {
 
+    @NotNull(message = "窗口编号不能为空")
     private String windowNo;
-    private String windowName;
+
+    @NotNull(message = "服务通道不能为空")
     private DispenseChannel serviceChannel;
-    private String serviceChannelDescription;
-    private Long todayCount;
-    private Double avgDurationSeconds;
-    private String avgDurationFormatted;
 }

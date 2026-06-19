@@ -1,6 +1,7 @@
 package com.pharmacy.dto;
 
 import com.pharmacy.entity.DispenseQueueItem;
+import com.pharmacy.enums.DispenseChannel;
 import com.pharmacy.enums.PrescriptionType;
 import com.pharmacy.enums.QueueItemStatus;
 import lombok.AllArgsConstructor;
@@ -18,6 +19,9 @@ public class QueueItemDTO {
     private String prescriptionNo;
     private PrescriptionType prescriptionType;
     private String prescriptionTypeDescription;
+    private DispenseChannel channel;
+    private String channelDescription;
+    private Integer drugItemCount;
     private LocalDateTime enqueueTime;
     private QueueItemStatus status;
     private String statusDescription;
@@ -33,6 +37,9 @@ public class QueueItemDTO {
         dto.setPrescriptionNo(item.getPrescriptionNo());
         dto.setPrescriptionType(item.getPrescriptionType());
         dto.setPrescriptionTypeDescription(item.getPrescriptionType().getDescription());
+        dto.setChannel(item.getChannel());
+        dto.setChannelDescription(item.getChannel().getDescription());
+        dto.setDrugItemCount(item.getDrugItemCount());
         dto.setEnqueueTime(item.getEnqueueTime());
         dto.setStatus(item.getStatus());
         dto.setStatusDescription(item.getStatus().getDescription());

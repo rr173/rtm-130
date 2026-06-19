@@ -1,6 +1,7 @@
 package com.pharmacy.repository;
 
 import com.pharmacy.entity.DispenseRecord;
+import com.pharmacy.enums.DispenseChannel;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -30,6 +31,26 @@ public interface DispenseRecordRepository extends JpaRepository<DispenseRecord, 
     @Query("SELECT dr.windowNo, COUNT(dr), AVG(dr.durationSeconds) FROM DispenseRecord dr " +
            "WHERE dr.startTime BETWEEN :startTime AND :endTime GROUP BY dr.windowNo")
     List<Object[]> statsByWindowAndDateRange(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
+
+    @Query("SELECT COUNT(dr) FROM DispenseRecord dr WHERE dr.channel = :channel " +
+           "AND dr.startTime BETWEEN :startTime AND :endTime")
+    long countByChannelAndDateRange(
+            @Param("channel") DispenseChannel channel,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
+
+    @Query("SELECT AVG(dr.durationSeconds) FROM DispenseRecord dr WHERE dr.channel = :channel " +
+           "AND dr.startTime BETWEEN :startTime AND :endTime")
+    Double avgDurationSecondsByChannelAndDateRange(
+            @Param("channel") DispenseChannel channel,
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
+
+    @Query("SELECT dr.channel, COUNT(dr), AVG(dr.durationSeconds) FROM DispenseRecord dr " +
+           "WHERE dr.startTime BETWEEN :startTime AND :endTime GROUP BY dr.channel")
+    List<Object[]> statsByChannelAndDateRange(
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime);
 

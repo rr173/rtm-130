@@ -1,6 +1,7 @@
 package com.pharmacy.dto;
 
 import com.pharmacy.entity.DispensingWindow;
+import com.pharmacy.enums.DispenseChannel;
 import com.pharmacy.enums.DispensingWindowStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -18,6 +19,10 @@ public class WindowDTO {
     private String windowName;
     private DispensingWindowStatus status;
     private String statusDescription;
+    private DispenseChannel serviceChannel;
+    private String serviceChannelDescription;
+    private DispenseChannel currentServingChannel;
+    private String currentServingChannelDescription;
     private String currentPrescriptionNo;
     private String currentPharmacistId;
     private String currentPharmacistName;
@@ -30,6 +35,12 @@ public class WindowDTO {
         dto.setWindowName(window.getWindowName());
         dto.setStatus(window.getStatus());
         dto.setStatusDescription(window.getStatus().getDescription());
+        dto.setServiceChannel(window.getServiceChannel());
+        dto.setServiceChannelDescription(window.getServiceChannel().getDescription());
+        if (window.getCurrentServingChannel() != null) {
+            dto.setCurrentServingChannel(window.getCurrentServingChannel());
+            dto.setCurrentServingChannelDescription(window.getCurrentServingChannel().getDescription());
+        }
         dto.setCurrentPrescriptionNo(window.getCurrentPrescriptionNo());
         dto.setCurrentPharmacistId(window.getCurrentPharmacistId());
         dto.setCurrentPharmacistName(window.getCurrentPharmacistName());

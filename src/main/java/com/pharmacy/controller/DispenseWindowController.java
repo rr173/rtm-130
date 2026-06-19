@@ -1,6 +1,7 @@
 package com.pharmacy.controller;
 
 import com.pharmacy.dto.*;
+import com.pharmacy.enums.DispenseChannel;
 import com.pharmacy.service.DispenseQueueService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,7 @@ public class DispenseWindowController {
     public ApiResponse<QueueItemDTO> enqueue(@PathVariable String prescriptionNo) {
         log.info("处方加入配药排队: {}", prescriptionNo);
         QueueItemDTO result = dispenseQueueService.enqueue(prescriptionNo);
-        return ApiResponse.success("处方已加入排队队列", result);
+        return ApiResponse.success("处方已加入排队队列[" + result.getChannelDescription() + "]", result);
     }
 
     @PostMapping("/window/claim")
@@ -30,7 +31,7 @@ public class DispenseWindowController {
         log.info("窗口[{}]领取下一张处方", dto.getWindowNo());
         QueueItemDTO result = dispenseQueueService.claimNext(
                 dto.getWindowNo(), dto.getPharmacistId(), dto.getPharmacistName());
-        return ApiResponse.success("领取成功", result);
+        return ApiResponse.success("领取成功，通道: " + result.getChannelDescription(), result);
     }
 
     @PostMapping("/window/complete")
@@ -61,6 +62,13 @@ public class DispenseWindowController {
         return ApiResponse.success("窗口已开启", result);
     }
 
+    @PutMapping("/window/channel")
+    public ApiResponse<WindowDTO> updateWindowChannel(@Valid @RequestBody WindowChannelConfigDTO dto) {
+        log.info("配置窗口[{}]服务通道: {}", dto.getWindowNo(), dto.getServiceChannel());
+        WindowDTO result = dispenseQueueService.updateWindowChannel(dto.getWindowNo(), dto.getServiceChannel());
+        return ApiResponse.success("窗口通道配置已更新为: " + result.getServiceChannelDescription(), result);
+    }
+
     @GetMapping("/windows")
     public ApiResponse<List<WindowDTO>> getAllWindows() {
         List<WindowDTO> result = dispenseQueueService.getAllWindows();
@@ -79,9 +87,32 @@ public class DispenseWindowController {
         return ApiResponse.success(result);
     }
 
+    @GetMapping("/queue/channel/{channel}")
+    public ApiResponse<List<QueueItemDTO>> getQueueListByChannel(@PathVariable DispenseChannel channel) {
+        log.info("查询[{}]排队列表", channel.getDescription());
+        List<QueueItemDTO> result = dispenseQueueService.getQueueListByChannel(channel);
+        return ApiResponse.success(result);
+    }
+
     @GetMapping("/queue/position/{prescriptionNo}")
     public ApiResponse<QueuePositionDTO> getQueuePosition(@PathVariable String prescriptionNo) {
         QueuePositionDTO result = dispenseQueueService.getQueuePosition(prescriptionNo);
+        return ApiResponse.success(result);
+    }
+
+    @GetMapping("/channel/overview")
+    public ApiResponse<ChannelOverviewDTO> getChannelOverview() {
+        log.info("获取通道总览数据");
+        ChannelOverviewDTO result = dispenseQueueService.getChannelOverview();
+        return ApiResponse.success(result);
+    }
+
+    @GetMapping("/channel/statistics/{channel}")
+    public ApiResponse<ChannelStatisticsDTO> getChannelStatistics(
+            @PathVariable DispenseChannel channel,
+            @RequestParam(required = false) LocalDate date) {
+        log.info("查询[{}]统计数据，日期: {}", channel.getDescription(), date);
+        ChannelStatisticsDTO result = dispenseQueueService.getChannelStatistics(channel, date);
         return ApiResponse.success(result);
     }
 

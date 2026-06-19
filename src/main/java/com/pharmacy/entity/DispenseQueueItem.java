@@ -1,5 +1,6 @@
 package com.pharmacy.entity;
 
+import com.pharmacy.enums.DispenseChannel;
 import com.pharmacy.enums.PrescriptionType;
 import com.pharmacy.enums.QueueItemStatus;
 import jakarta.persistence.*;
@@ -14,7 +15,8 @@ import java.time.LocalDateTime;
 @Table(name = "dispense_queue_item", indexes = {
     @Index(name = "idx_queue_prescription_no", columnList = "prescriptionNo"),
     @Index(name = "idx_queue_status", columnList = "status"),
-    @Index(name = "idx_queue_enqueue_time", columnList = "enqueueTime")
+    @Index(name = "idx_queue_enqueue_time", columnList = "enqueueTime"),
+    @Index(name = "idx_queue_channel", columnList = "channel")
 })
 public class DispenseQueueItem {
 
@@ -28,6 +30,13 @@ public class DispenseQueueItem {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private PrescriptionType prescriptionType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private DispenseChannel channel;
+
+    @Column(nullable = false)
+    private Integer drugItemCount;
 
     @Column(nullable = false)
     private LocalDateTime enqueueTime;

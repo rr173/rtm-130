@@ -8,13 +8,12 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class WindowStatisticsDTO {
+public class ChannelStatisticsDTO {
 
-    private String windowNo;
-    private String windowName;
-    private DispenseChannel serviceChannel;
-    private String serviceChannelDescription;
-    private Long todayCount;
+    private DispenseChannel channel;
+    private String channelDescription;
+    private Long currentWaitingCount;
+    private Long todayProcessedCount;
     private Double avgDurationSeconds;
     private String avgDurationFormatted;
 }

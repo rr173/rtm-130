@@ -5,6 +5,7 @@ import com.pharmacy.entity.DispensingWindow;
 import com.pharmacy.entity.Doctor;
 import com.pharmacy.entity.Drug;
 import com.pharmacy.enums.ContraindicationLevel;
+import com.pharmacy.enums.DispenseChannel;
 import com.pharmacy.enums.DispensingWindowStatus;
 import com.pharmacy.enums.DrugCategory;
 import com.pharmacy.enums.PrescriptionType;
@@ -205,20 +206,22 @@ public class DataInitializer implements CommandLineRunner {
         }
 
         List<DispensingWindow> windows = Arrays.asList(
-                createWindow("W1", "1号配药窗口"),
-                createWindow("W2", "2号配药窗口"),
-                createWindow("W3", "3号配药窗口")
+                createWindow("W1", "1号配药窗口(快速)", DispenseChannel.FAST),
+                createWindow("W2", "2号配药窗口(普通)", DispenseChannel.NORMAL),
+                createWindow("W3", "3号配药窗口(综合)", DispenseChannel.BOTH)
         );
 
         dispensingWindowRepository.saveAll(windows);
         log.info("初始化配药窗口数据完成，共{}个窗口", windows.size());
+        log.info("窗口配置: W1=快速通道, W2=普通通道, W3=双通道(支持跨道调度)");
     }
 
-    private DispensingWindow createWindow(String windowNo, String windowName) {
+    private DispensingWindow createWindow(String windowNo, String windowName, DispenseChannel serviceChannel) {
         DispensingWindow window = new DispensingWindow();
         window.setWindowNo(windowNo);
         window.setWindowName(windowName);
         window.setStatus(DispensingWindowStatus.IDLE);
+        window.setServiceChannel(serviceChannel);
         return window;
     }
 }
