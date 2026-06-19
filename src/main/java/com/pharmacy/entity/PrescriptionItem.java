@@ -54,4 +54,12 @@ public class PrescriptionItem {
     private Boolean preoccupied = false;
 
     private Boolean dispensed = false;
+
+    @OneToMany(mappedBy = "prescriptionItem", cascade = CascadeType.ALL, orphanRemoval = true)
+    private java.util.List<PrescriptionItemBatch> batchAllocations = new java.util.ArrayList<>();
+
+    public void addBatchAllocation(PrescriptionItemBatch allocation) {
+        batchAllocations.add(allocation);
+        allocation.setPrescriptionItem(this);
+    }
 }

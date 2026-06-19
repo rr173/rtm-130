@@ -51,6 +51,17 @@ public class Drug {
     @Column(length = 500)
     private String ingredient;
 
+    @Column(nullable = false)
+    private Boolean splittable = false;
+
+    @Column(length = 50)
+    private String packageUnit;
+
+    private Integer packageQuantity;
+
+    @Column(length = 50)
+    private String splitUnit;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

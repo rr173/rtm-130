@@ -50,6 +50,12 @@ public class InventoryLog {
     @Column(length = 100)
     private String operator;
 
+    @Column(length = 100)
+    private String batchNo;
+
+    @Column(length = 2000)
+    private String batchDetails;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

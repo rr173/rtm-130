@@ -26,6 +26,8 @@ public class InventoryLogDTO {
     private String prescriptionNo;
     private String remark;
     private String operator;
+    private String batchNo;
+    private String batchDetails;
     private LocalDateTime createdAt;
 
     public static InventoryLogDTO fromEntity(InventoryLog log) {
@@ -43,6 +45,8 @@ public class InventoryLogDTO {
         dto.setPrescriptionNo(log.getPrescriptionNo());
         dto.setRemark(log.getRemark());
         dto.setOperator(log.getOperator());
+        dto.setBatchNo(log.getBatchNo());
+        dto.setBatchDetails(log.getBatchDetails());
         dto.setCreatedAt(log.getCreatedAt());
         return dto;
     }

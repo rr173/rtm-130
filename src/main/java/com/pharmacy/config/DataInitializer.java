@@ -89,6 +89,49 @@ public class DataInitializer implements CommandLineRunner {
         drug.setIngredient(ingredient);
         drug.setAvailableStock(availableStock);
         drug.setPreoccupiedStock(preoccupiedStock);
+
+        if (code.equals("DRUG001")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("盒");
+            drug.setPackageQuantity(24);
+            drug.setSplitUnit("粒");
+        } else if (code.equals("DRUG002")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("盒");
+            drug.setPackageQuantity(20);
+            drug.setSplitUnit("粒");
+        } else if (code.equals("DRUG003")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("盒");
+            drug.setPackageQuantity(14);
+            drug.setSplitUnit("粒");
+        } else if (code.equals("DRUG004")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("盒");
+            drug.setPackageQuantity(30);
+            drug.setSplitUnit("片");
+        } else if (code.equals("DRUG007")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("瓶");
+            drug.setPackageQuantity(100);
+            drug.setSplitUnit("片");
+        } else if (code.equals("DRUG008")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("瓶");
+            drug.setPackageQuantity(100);
+            drug.setSplitUnit("片");
+        } else if (code.equals("DRUG010")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("瓶");
+            drug.setPackageQuantity(100);
+            drug.setSplitUnit("片");
+        } else if (code.equals("DRUG012")) {
+            drug.setSplittable(true);
+            drug.setPackageUnit("盒");
+            drug.setPackageQuantity(6);
+            drug.setSplitUnit("片");
+        }
+
         return drug;
     }
 

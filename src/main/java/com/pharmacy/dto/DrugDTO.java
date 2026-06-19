@@ -27,6 +27,10 @@ public class DrugDTO {
     private Integer preoccupiedStock;
     private Integer actualStock;
     private String ingredient;
+    private Boolean splittable;
+    private String packageUnit;
+    private Integer packageQuantity;
+    private String splitUnit;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -45,6 +49,10 @@ public class DrugDTO {
         dto.setPreoccupiedStock(drug.getPreoccupiedStock());
         dto.setActualStock(drug.getActualStock());
         dto.setIngredient(drug.getIngredient());
+        dto.setSplittable(drug.getSplittable());
+        dto.setPackageUnit(drug.getPackageUnit());
+        dto.setPackageQuantity(drug.getPackageQuantity());
+        dto.setSplitUnit(drug.getSplitUnit());
         dto.setCreatedAt(drug.getCreatedAt());
         dto.setUpdatedAt(drug.getUpdatedAt());
         return dto;
