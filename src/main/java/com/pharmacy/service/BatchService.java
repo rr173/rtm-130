@@ -62,6 +62,12 @@ public class BatchService {
                             drug.getName(), dto.getBatchNo()));
         }
 
+        int packageQty = 1;
+        if (Boolean.TRUE.equals(drug.getSplittable()) && drug.getPackageQuantity() != null) {
+            packageQty = drug.getPackageQuantity();
+        }
+        int totalQuantityInMinUnit = dto.getQuantity() * packageQty;
+
         DrugBatch batch = new DrugBatch();
         batch.setDrugCode(drug.getDrugCode());
         batch.setDrugName(drug.getName());
@@ -69,8 +75,8 @@ public class BatchService {
         batch.setProductionDate(dto.getProductionDate());
         batch.setExpiryDate(dto.getExpiryDate());
         batch.setPurchasePrice(dto.getPurchasePrice());
-        batch.setTotalQuantity(dto.getQuantity());
-        batch.setAvailableQuantity(dto.getQuantity());
+        batch.setTotalQuantity(totalQuantityInMinUnit);
+        batch.setAvailableQuantity(totalQuantityInMinUnit);
         batch.setPreoccupiedQuantity(0);
         batch.setSplitQuantity(0);
         batch.setDispensedQuantity(0);
@@ -82,22 +88,23 @@ public class BatchService {
 
         int beforeAvailable = drug.getAvailableStock();
         int beforePreoccupied = drug.getPreoccupiedStock();
-        drug.setAvailableStock(beforeAvailable + dto.getQuantity());
+        drug.setAvailableStock(beforeAvailable + totalQuantityInMinUnit);
         drugRepository.save(drug);
 
-        createInventoryLog(drug, InventoryLogType.STOCK_IN, dto.getQuantity(),
-                beforeAvailable, beforeAvailable + dto.getQuantity(),
+        createInventoryLog(drug, InventoryLogType.STOCK_IN, totalQuantityInMinUnit,
+                beforeAvailable, beforeAvailable + totalQuantityInMinUnit,
                 beforePreoccupied, beforePreoccupied,
-                null, "批次入库: " + dto.getBatchNo(), dto.getOperator(),
+                null, "批次入库: " + dto.getBatchNo() + " (包装数量:" + dto.getQuantity() + ")", dto.getOperator(),
                 dto.getBatchNo(), null);
 
-        createBatchLog(batch, BatchLogType.STOCK_IN, dto.getQuantity(),
-                0, dto.getQuantity(),
+        createBatchLog(batch, BatchLogType.STOCK_IN, totalQuantityInMinUnit,
+                0, totalQuantityInMinUnit,
                 0, 0,
                 0, 0,
-                null, "批次入库", dto.getOperator());
+                null, "批次入库: 包装数量" + dto.getQuantity(), dto.getOperator());
 
-        log.info("批次入库完成: 批次ID[{}]", batch.getId());
+        log.info("批次入库完成: 批次ID[{}], 包装数量[{}], 最小单位数量[{}]",
+                batch.getId(), dto.getQuantity(), totalQuantityInMinUnit);
         return convertToBatchDTO(batch);
     }
 
@@ -197,7 +204,7 @@ public class BatchService {
                     if (drug != null) {
                         int beforeAvailable = drug.getAvailableStock();
                         int beforePreoccupied = drug.getPreoccupiedStock();
-                        int reduceQty = batch.getAvailableQuantity();
+                        int reduceQty = batch.getAvailableQuantity() + batch.getSplitQuantity();
                         drug.setAvailableStock(Math.max(0, beforeAvailable - reduceQty));
                         drugRepository.save(drug);
                         createInventoryLog(drug, InventoryLogType.ADJUST, -reduceQty,
@@ -206,11 +213,14 @@ public class BatchService {
                                 null, "过期批次锁定，从可发药池移除", "system",
                                 batch.getBatchNo(), null);
                     }
+                    int batchBeforeAvailable = batch.getAvailableQuantity();
+                    int batchBeforeSplit = batch.getSplitQuantity();
                     batch.setAvailableQuantity(0);
-                    createBatchLog(batch, BatchLogType.EXPIRE_LOCK, batch.getAvailableQuantity(),
-                            batch.getAvailableQuantity(), 0,
+                    batch.setSplitQuantity(0);
+                    createBatchLog(batch, BatchLogType.EXPIRE_LOCK, batchBeforeAvailable + batchBeforeSplit,
+                            batchBeforeAvailable, 0,
                             batch.getPreoccupiedQuantity(), batch.getPreoccupiedQuantity(),
-                            batch.getSplitQuantity(), batch.getSplitQuantity(),
+                            batchBeforeSplit, 0,
                             null, "批次过期自动锁定", "system");
                 }
                 batch.setStatus(newStatus);
@@ -235,15 +245,16 @@ public class BatchService {
         for (DrugBatch batch : batches) {
             if (batch.getStatus() != BatchStatus.RECALLED) {
                 int beforeAvailable = batch.getAvailableQuantity();
-                lockedQty += beforeAvailable;
+                int beforeSplit = batch.getSplitQuantity();
+                lockedQty += beforeAvailable + beforeSplit;
 
                 Drug drug = drugRepository.findByDrugCodeWithLock(batch.getDrugCode()).orElse(null);
                 if (drug != null) {
                     int drugBeforeAvailable = drug.getAvailableStock();
                     int drugBeforePreoccupied = drug.getPreoccupiedStock();
-                    drug.setAvailableStock(Math.max(0, drugBeforeAvailable - beforeAvailable));
+                    drug.setAvailableStock(Math.max(0, drugBeforeAvailable - beforeAvailable - beforeSplit));
                     drugRepository.save(drug);
-                    createInventoryLog(drug, InventoryLogType.ADJUST, -beforeAvailable,
+                    createInventoryLog(drug, InventoryLogType.ADJUST, -(beforeAvailable + beforeSplit),
                             drugBeforeAvailable, drug.getAvailableStock(),
                             drugBeforePreoccupied, drugBeforePreoccupied,
                             null, "批次召回锁定: " + dto.getReason(), dto.getOperator(),
@@ -251,13 +262,14 @@ public class BatchService {
                 }
 
                 batch.setAvailableQuantity(0);
+                batch.setSplitQuantity(0);
                 batch.setStatus(BatchStatus.RECALLED);
                 drugBatchRepository.save(batch);
 
-                createBatchLog(batch, BatchLogType.RECALL, beforeAvailable,
+                createBatchLog(batch, BatchLogType.RECALL, beforeAvailable + beforeSplit,
                         beforeAvailable, 0,
                         batch.getPreoccupiedQuantity(), batch.getPreoccupiedQuantity(),
-                        batch.getSplitQuantity(), batch.getSplitQuantity(),
+                        beforeSplit, 0,
                         null, "批次召回: " + dto.getReason(), dto.getOperator());
             }
         }
@@ -320,12 +332,17 @@ public class BatchService {
             throw new BusinessException("该药品未正确配置拆零规格(包装数量)");
         }
 
-        if (batch.getAvailableQuantity() < 1) {
-            throw new BusinessException("该批次可用库存不足，无法拆零");
-        }
-
         int splitUnit = drug.getPackageQuantity();
         int splitQty = dto.getSplitQuantity();
+
+        if (splitQty != splitUnit) {
+            throw new BusinessException(
+                    String.format("拆零数量必须等于包装规格%d%s", splitUnit, drug.getSplitUnit() != null ? drug.getSplitUnit() : ""));
+        }
+
+        if (batch.getAvailableQuantity() < splitUnit) {
+            throw new BusinessException("该批次可用库存不足，无法拆零");
+        }
 
         Optional<DrugSplitRecord> existingActive = drugSplitRecordRepository.findByBatchIdAndActiveTrue(dto.getBatchId());
         if (existingActive.isPresent()) {
@@ -335,7 +352,7 @@ public class BatchService {
         int beforeAvailable = batch.getAvailableQuantity();
         int beforeSplit = batch.getSplitQuantity();
 
-        batch.setAvailableQuantity(beforeAvailable - 1);
+        batch.setAvailableQuantity(beforeAvailable - splitUnit);
         batch.setSplitQuantity(beforeSplit + splitQty);
         batch.setSplitLocked(true);
         batch.setSplitLockedBy(dto.getOperator());
@@ -377,13 +394,16 @@ public class BatchService {
             return;
         }
 
+        Drug drug = drugRepository.findByDrugCode(batch.getDrugCode()).orElse(null);
+        int packageUnit = (drug != null && drug.getPackageQuantity() != null) ? drug.getPackageQuantity() : 1;
+
         List<DrugSplitRecord> activeRecords = drugSplitRecordRepository.findActiveSplitRecordsByBatchId(batchId);
         for (DrugSplitRecord record : activeRecords) {
             if (record.getRemainingSplitQuantity() > 0) {
                 int revertQty = record.getRemainingSplitQuantity();
                 int beforeAvailable = batch.getAvailableQuantity();
                 int beforeSplit = batch.getSplitQuantity();
-                batch.setAvailableQuantity(beforeAvailable + 1);
+                batch.setAvailableQuantity(beforeAvailable + packageUnit);
                 batch.setSplitQuantity(Math.max(0, beforeSplit - revertQty));
                 createBatchLog(batch, BatchLogType.ADJUST, revertQty,
                         beforeAvailable, batch.getAvailableQuantity(),
@@ -478,33 +498,16 @@ public class BatchService {
             for (DrugBatch batch : availableBatches) {
                 if (remaining <= 0) break;
 
-                int batchUsable = batch.getAvailableQuantity();
-                if (Boolean.TRUE.equals(drug.getSplittable()) && drug.getPackageQuantity() != null) {
-                    int pkgQty = drug.getPackageQuantity();
-                    int fullPackages = (remaining + pkgQty - 1) / pkgQty;
-                    batchUsable = Math.min(batch.getAvailableQuantity() * pkgQty, remaining);
-                    int packagesNeeded = (int) Math.ceil((double) remaining / pkgQty);
-                    int actualPackages = Math.min(packagesNeeded, batch.getAvailableQuantity());
-                    batchUsable = actualPackages * pkgQty;
-                    if (batchUsable > remaining) {
-                        batchUsable = remaining;
-                    }
-                }
-
+                int batchUsable = batch.getAvailableTotal();
                 if (batchUsable <= 0) continue;
 
                 int takeQty = Math.min(batchUsable, remaining);
-
-                if (Boolean.TRUE.equals(drug.getSplittable()) && drug.getPackageQuantity() != null
-                        && takeQty % drug.getPackageQuantity() != 0 && takeQty != remaining) {
-                    continue;
-                }
 
                 BatchAllocation alloc = new BatchAllocation();
                 alloc.batchId = batch.getId();
                 alloc.batchNo = batch.getBatchNo();
                 alloc.quantity = takeQty;
-                alloc.fromSplit = false;
+                alloc.fromSplit = (batch.getSplitQuantity() >= takeQty);
                 allocations.add(alloc);
                 remaining -= takeQty;
             }
@@ -525,7 +528,7 @@ public class BatchService {
                 .orElseThrow(() -> new ResourceNotFoundException("药品不存在: " + drugCode));
 
         for (BatchAllocation alloc : allocations) {
-            if (alloc.fromSplit) {
+            if (alloc.fromSplit && alloc.splitRecordId != null) {
                 DrugSplitRecord splitRecord = drugSplitRecordRepository.findById(alloc.splitRecordId)
                         .orElseThrow(() -> new ResourceNotFoundException("拆零记录不存在: " + alloc.splitRecordId));
                 splitRecord.setRemainingSplitQuantity(splitRecord.getRemainingSplitQuantity() - alloc.quantity);
@@ -552,26 +555,47 @@ public class BatchService {
                 DrugBatch batch = drugBatchRepository.findByIdWithLock(alloc.batchId)
                         .orElseThrow(() -> new ResourceNotFoundException("批次不存在: " + alloc.batchId));
 
-                int deductPackages = 1;
-                if (drug.getPackageQuantity() != null && drug.getPackageQuantity() > 0) {
-                    deductPackages = (int) Math.ceil((double) alloc.quantity / drug.getPackageQuantity());
-                }
-                if (!Boolean.TRUE.equals(drug.getSplittable())) {
-                    deductPackages = alloc.quantity;
-                }
-
+                int qtyToPreoccupy = alloc.quantity;
                 int beforeAvailable = batch.getAvailableQuantity();
+                int beforeSplit = batch.getSplitQuantity();
                 int beforePreoccupied = batch.getPreoccupiedQuantity();
 
-                batch.setAvailableQuantity(beforeAvailable - deductPackages);
+                int takeFromSplit = 0;
+                int takeFromAvailable = 0;
+
+                if (batch.getSplitQuantity() > 0) {
+                    takeFromSplit = Math.min(batch.getSplitQuantity(), qtyToPreoccupy);
+                    batch.setSplitQuantity(batch.getSplitQuantity() - takeFromSplit);
+                    qtyToPreoccupy -= takeFromSplit;
+                }
+
+                if (qtyToPreoccupy > 0 && batch.getAvailableQuantity() > 0) {
+                    takeFromAvailable = Math.min(batch.getAvailableQuantity(), qtyToPreoccupy);
+                    batch.setAvailableQuantity(batch.getAvailableQuantity() - takeFromAvailable);
+                    qtyToPreoccupy -= takeFromAvailable;
+                }
+
+                if (qtyToPreoccupy > 0) {
+                    throw new BusinessException(
+                            String.format("批次[%s]可用库存不足，需要[%d]，剩余可用[%d]",
+                                    batch.getBatchNo(), alloc.quantity, batch.getAvailableTotal()));
+                }
+
                 batch.setPreoccupiedQuantity(beforePreoccupied + alloc.quantity);
                 drugBatchRepository.save(batch);
+
+                String remark = "批次预占";
+                if (takeFromSplit > 0 && takeFromAvailable > 0) {
+                    remark = String.format("批次预占: 散片%d + 整包%d", takeFromSplit, takeFromAvailable);
+                } else if (takeFromSplit > 0) {
+                    remark = "批次预占: 散片";
+                }
 
                 createBatchLog(batch, BatchLogType.PREOCCUPY, alloc.quantity,
                         beforeAvailable, batch.getAvailableQuantity(),
                         beforePreoccupied, batch.getPreoccupiedQuantity(),
-                        batch.getSplitQuantity(), batch.getSplitQuantity(),
-                        prescriptionNo, "批次预占", operator);
+                        beforeSplit, batch.getSplitQuantity(),
+                        prescriptionNo, remark, operator);
             }
         }
     }
@@ -581,40 +605,34 @@ public class BatchService {
         List<BatchInventoryLog> preoccupyLogs = batchInventoryLogRepository
                 .findByPrescriptionNoAndLogType(prescriptionNo, BatchLogType.PREOCCUPY);
 
-        Drug drug = drugRepository.findByDrugCodeWithLock(drugCode).orElse(null);
-
         for (BatchInventoryLog preLog : preoccupyLogs) {
             DrugBatch batch = drugBatchRepository.findByIdWithLock(preLog.getBatchId()).orElse(null);
             if (batch == null) continue;
 
             int releaseQty = preLog.getQuantity();
             int beforeAvailable = batch.getAvailableQuantity();
+            int beforeSplit = batch.getSplitQuantity();
             int beforePreoccupied = batch.getPreoccupiedQuantity();
 
-            if (preLog.getBeforeSplit() != null && preLog.getAfterSplit() != null
-                    && preLog.getBeforeSplit() > preLog.getAfterSplit()) {
-                int splitReleased = preLog.getBeforeSplit() - preLog.getAfterSplit();
-                batch.setSplitQuantity(batch.getSplitQuantity() + splitReleased);
-                batch.setPreoccupiedQuantity(Math.max(0, beforePreoccupied - releaseQty));
-            } else {
-                int pkgQty = (drug != null && drug.getPackageQuantity() != null) ? drug.getPackageQuantity() : 1;
-                int packagesReturned;
-                if (Boolean.TRUE.equals(drug != null && drug.getSplittable())) {
-                    packagesReturned = (int) Math.ceil((double) releaseQty / pkgQty);
-                } else {
-                    packagesReturned = releaseQty;
-                }
-                batch.setAvailableQuantity(beforeAvailable + packagesReturned);
-                batch.setPreoccupiedQuantity(Math.max(0, beforePreoccupied - releaseQty));
+            int availableReduced = preLog.getBeforeAvailable() - preLog.getAfterAvailable();
+            int splitReduced = preLog.getBeforeSplit() != null && preLog.getAfterSplit() != null
+                    ? preLog.getBeforeSplit() - preLog.getAfterSplit() : 0;
+
+            if (availableReduced > 0) {
+                batch.setAvailableQuantity(beforeAvailable + availableReduced);
             }
+            if (splitReduced > 0) {
+                batch.setSplitQuantity(beforeSplit + splitReduced);
+            }
+
+            batch.setPreoccupiedQuantity(Math.max(0, beforePreoccupied - releaseQty));
 
             drugBatchRepository.save(batch);
 
             createBatchLog(batch, BatchLogType.RELEASE_PREOCCUPY, releaseQty,
                     beforeAvailable, batch.getAvailableQuantity(),
                     beforePreoccupied, batch.getPreoccupiedQuantity(),
-                    preLog.getAfterSplit() != null ? preLog.getAfterSplit() : batch.getSplitQuantity(),
-                    batch.getSplitQuantity(),
+                    beforeSplit, batch.getSplitQuantity(),
                     prescriptionNo, "释放预占: " + reason, operator);
         }
     }

@@ -87,10 +87,10 @@ public class DrugBatch {
     private Long version;
 
     public int getRemainingQuantity() {
-        return availableQuantity + preoccupiedQuantity;
+        return totalQuantity - dispensedQuantity;
     }
 
-    public int getActualRemaining() {
-        return totalQuantity - dispensedQuantity;
+    public int getAvailableTotal() {
+        return availableQuantity + splitQuantity;
     }
 }

@@ -290,13 +290,20 @@ public class InventoryService {
         int beforeAvailable = drug.getAvailableStock();
         int beforePreoccupied = drug.getPreoccupiedStock();
 
-        drug.setAvailableStock(beforeAvailable + dto.getQuantity());
+        int addQuantity = dto.getQuantity();
+        if (Boolean.TRUE.equals(drug.getSplittable()) && drug.getPackageQuantity() != null) {
+            addQuantity = dto.getQuantity() * drug.getPackageQuantity();
+            log.info("可拆零药品入库: 包装数量[{}] × 每包[{}] = 最小单位[{}]",
+                    dto.getQuantity(), drug.getPackageQuantity(), addQuantity);
+        }
+
+        drug.setAvailableStock(beforeAvailable + addQuantity);
         drugRepository.save(drug);
 
-        createInventoryLog(drug, InventoryLogType.STOCK_IN, dto.getQuantity(),
-                beforeAvailable, beforeAvailable + dto.getQuantity(),
+        createInventoryLog(drug, InventoryLogType.STOCK_IN, addQuantity,
+                beforeAvailable, beforeAvailable + addQuantity,
                 beforePreoccupied, beforePreoccupied,
-                null, dto.getRemark(), dto.getOperator(),
+                null, dto.getRemark() + (addQuantity != dto.getQuantity() ? " (包装数量:" + dto.getQuantity() + ")" : ""), dto.getOperator(),
                 null, null);
 
         log.info("药品[{}]入库完成，入库前: {}, 入库后: {}",
