@@ -1,12 +1,6 @@
 package com.pharmacy.service;
 
-import com.pharmacy.dto.CancelPrescriptionDTO;
-import com.pharmacy.dto.DispenseConfirmDTO;
-import com.pharmacy.dto.PharmacistConfirmDTO;
-import com.pharmacy.dto.PrescriptionDTO;
-import com.pharmacy.dto.PrescriptionItemDTO;
-import com.pharmacy.dto.PrescriptionSubmitDTO;
-import com.pharmacy.dto.ReviewResultDTO;
+import com.pharmacy.dto.*;
 import com.pharmacy.entity.Prescription;
 import com.pharmacy.entity.PrescriptionItem;
 import com.pharmacy.enums.PrescriptionStatus;
@@ -35,6 +29,7 @@ public class PrescriptionService {
     private final DoctorRepository doctorRepository;
     private final ReviewEngineService reviewEngineService;
     private final InventoryService inventoryService;
+    private final DispenseQueueService dispenseQueueService;
 
     @Transactional
     public PrescriptionDTO submitPrescription(PrescriptionSubmitDTO dto) {
@@ -72,6 +67,17 @@ public class PrescriptionService {
         }
 
         prescription = prescriptionRepository.save(prescription);
+
+        if (prescription.getStatus() == PrescriptionStatus.PREOCCUPIED) {
+            try {
+                dispenseQueueService.enqueue(prescription.getPrescriptionNo());
+                prescription = prescriptionRepository.findByPrescriptionNo(prescription.getPrescriptionNo())
+                        .orElse(prescription);
+            } catch (Exception e) {
+                log.warn("处方[{}]自动加入配药队列失败: {}", prescription.getPrescriptionNo(), e.getMessage());
+            }
+        }
+
         return PrescriptionDTO.fromEntity(prescription);
     }
 
@@ -111,6 +117,17 @@ public class PrescriptionService {
         }
 
         prescription = prescriptionRepository.save(prescription);
+
+        if (prescription.getStatus() == PrescriptionStatus.PREOCCUPIED) {
+            try {
+                dispenseQueueService.enqueue(prescription.getPrescriptionNo());
+                prescription = prescriptionRepository.findByPrescriptionNo(prescription.getPrescriptionNo())
+                        .orElse(prescription);
+            } catch (Exception e) {
+                log.warn("处方[{}]自动加入配药队列失败: {}", prescription.getPrescriptionNo(), e.getMessage());
+            }
+        }
+
         return PrescriptionDTO.fromEntity(prescription);
     }
 
@@ -121,9 +138,10 @@ public class PrescriptionService {
         Prescription prescription = prescriptionRepository.findByPrescriptionNoWithLock(dto.getPrescriptionNo())
                 .orElseThrow(() -> new ResourceNotFoundException("处方不存在: " + dto.getPrescriptionNo()));
 
-        if (prescription.getStatus() != PrescriptionStatus.PREOCCUPIED) {
+        if (prescription.getStatus() != PrescriptionStatus.PREOCCUPIED
+                && prescription.getStatus() != PrescriptionStatus.DISPENSE_READY) {
             throw new InvalidStatusException(
-                    String.format("处方状态[%s]不允许发药操作，需要先完成审核和库存预占",
+                    String.format("处方状态[%s]不允许发药操作，需要先完成配药或库存预占",
                             prescription.getStatus().getDescription()));
         }
 
@@ -155,8 +173,13 @@ public class PrescriptionService {
         }
 
         if (prescription.getStatus() == PrescriptionStatus.PREOCCUPIED
-                || prescription.getStatus() == PrescriptionStatus.PREOCCUPY_FAILED) {
+                || prescription.getStatus() == PrescriptionStatus.PREOCCUPY_FAILED
+                || prescription.getStatus() == PrescriptionStatus.DISPENSE_READY) {
             inventoryService.releasePreoccupyStock(prescription, dto.getReason(), dto.getOperator());
+        }
+
+        if (prescription.getStatus() == PrescriptionStatus.DISPENSING) {
+            throw new InvalidStatusException("配药中的处方不能直接取消，请先在配药窗口释放处方");
         }
 
         prescription.setStatus(PrescriptionStatus.CANCELLED);
@@ -192,6 +215,17 @@ public class PrescriptionService {
         }
 
         prescription = prescriptionRepository.save(prescription);
+
+        if (prescription.getStatus() == PrescriptionStatus.PREOCCUPIED) {
+            try {
+                dispenseQueueService.enqueue(prescription.getPrescriptionNo());
+                prescription = prescriptionRepository.findByPrescriptionNo(prescription.getPrescriptionNo())
+                        .orElse(prescription);
+            } catch (Exception e) {
+                log.warn("处方[{}]自动加入配药队列失败: {}", prescription.getPrescriptionNo(), e.getMessage());
+            }
+        }
+
         return PrescriptionDTO.fromEntity(prescription);
     }
 

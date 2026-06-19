@@ -7,6 +7,8 @@ public enum PrescriptionStatus {
     REVIEW_BLOCKED("审核拦截"),
     PREOCCUPIED("已预占待配药"),
     PREOCCUPY_FAILED("预占失败"),
+    DISPENSING("配药中"),
+    DISPENSE_READY("已配药待发药"),
     DISPENSED("已发药"),
     CANCELLED("已取消");
 

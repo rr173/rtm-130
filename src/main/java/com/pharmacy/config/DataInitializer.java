@@ -1,12 +1,15 @@
 package com.pharmacy.config;
 
 import com.pharmacy.entity.Contraindication;
+import com.pharmacy.entity.DispensingWindow;
 import com.pharmacy.entity.Doctor;
 import com.pharmacy.entity.Drug;
 import com.pharmacy.enums.ContraindicationLevel;
+import com.pharmacy.enums.DispensingWindowStatus;
 import com.pharmacy.enums.DrugCategory;
 import com.pharmacy.enums.PrescriptionType;
 import com.pharmacy.repository.ContraindicationRepository;
+import com.pharmacy.repository.DispensingWindowRepository;
 import com.pharmacy.repository.DoctorRepository;
 import com.pharmacy.repository.DrugRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +30,7 @@ public class DataInitializer implements CommandLineRunner {
     private final DrugRepository drugRepository;
     private final DoctorRepository doctorRepository;
     private final ContraindicationRepository contraindicationRepository;
+    private final DispensingWindowRepository dispensingWindowRepository;
 
     @Override
     @Transactional
@@ -35,6 +39,7 @@ public class DataInitializer implements CommandLineRunner {
         initDrugs();
         initDoctors();
         initContraindications();
+        initDispensingWindows();
         log.info("基础数据初始化完成");
     }
 
@@ -191,5 +196,29 @@ public class DataInitializer implements CommandLineRunner {
         c.setLevel(level);
         c.setDescription(description);
         return c;
+    }
+
+    private void initDispensingWindows() {
+        if (dispensingWindowRepository.count() > 0) {
+            log.info("配药窗口数据已存在，跳过初始化");
+            return;
+        }
+
+        List<DispensingWindow> windows = Arrays.asList(
+                createWindow("W1", "1号配药窗口"),
+                createWindow("W2", "2号配药窗口"),
+                createWindow("W3", "3号配药窗口")
+        );
+
+        dispensingWindowRepository.saveAll(windows);
+        log.info("初始化配药窗口数据完成，共{}个窗口", windows.size());
+    }
+
+    private DispensingWindow createWindow(String windowNo, String windowName) {
+        DispensingWindow window = new DispensingWindow();
+        window.setWindowNo(windowNo);
+        window.setWindowName(windowName);
+        window.setStatus(DispensingWindowStatus.IDLE);
+        return window;
     }
 }
