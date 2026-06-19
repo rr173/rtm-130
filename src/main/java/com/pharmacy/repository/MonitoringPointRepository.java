@@ -16,7 +16,7 @@ public interface MonitoringPointRepository extends JpaRepository<MonitoringPoint
 
     List<MonitoringPoint> findByEnabledTrue();
 
-    @Query("SELECT mp FROM MonitoringPoint mp WHERE :batchNo MEMBER OF mp.boundBatchNos")
+    @Query("SELECT DISTINCT mp FROM MonitoringPoint mp JOIN mp.boundBatchNos bn WHERE bn = :batchNo")
     List<MonitoringPoint> findByBoundBatchNo(@Param("batchNo") String batchNo);
 
     boolean existsByPointCode(String pointCode);

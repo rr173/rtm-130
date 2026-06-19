@@ -21,6 +21,12 @@ public interface AlertEventRepository extends JpaRepository<AlertEvent, Long> {
             @Param("pointCode") String pointCode,
             @Param("statuses") List<AlertStatus> statuses);
 
+    @Query("SELECT a FROM AlertEvent a WHERE a.pointCode = :pointCode AND a.alertStatus IN :statuses " +
+           "ORDER BY a.firstTriggerTime DESC")
+    List<AlertEvent> findByPointCodeAndAlertStatusIn(
+            @Param("pointCode") String pointCode,
+            @Param("statuses") List<AlertStatus> statuses);
+
     @Query("SELECT a FROM AlertEvent a WHERE a.alertLevel = :alertLevel AND a.alertStatus IN :statuses " +
            "ORDER BY a.firstTriggerTime DESC")
     List<AlertEvent> findByLevelAndStatusIn(

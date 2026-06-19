@@ -70,7 +70,7 @@ public class TempHumidityService {
         AlertLevel level = determineAlertLevel(tempDeviation, humidityDeviation, thresholds);
 
         List<AlertStatus> activeStatuses = List.of(AlertStatus.ACTIVE);
-        List<AlertEvent> activeAlerts = alertEventRepository.findActiveRootAlertsByPointCode(
+        List<AlertEvent> activeAlerts = alertEventRepository.findByPointCodeAndAlertStatusIn(
                 point.getPointCode(), activeStatuses);
 
         if (activeAlerts.isEmpty()) {
@@ -90,7 +90,7 @@ public class TempHumidityService {
 
     private void handleBackToNormal(MonitoringPoint point, TempHumidityReading reading) {
         List<AlertStatus> activeStatuses = List.of(AlertStatus.ACTIVE);
-        List<AlertEvent> activeAlerts = alertEventRepository.findActiveRootAlertsByPointCode(
+        List<AlertEvent> activeAlerts = alertEventRepository.findByPointCodeAndAlertStatusIn(
                 point.getPointCode(), activeStatuses);
 
         for (AlertEvent alert : activeAlerts) {
@@ -124,7 +124,7 @@ public class TempHumidityService {
         if (isTempDeterminant) {
             if (maxDev.compareTo(thresholds.getRedTempDeviation()) > 0) {
                 return AlertLevel.RED;
-            } else if (maxDev.compareTo(thresholds.getOrangeTempDeviation()) > 0) {
+            } else if (maxDev.compareTo(thresholds.getYellowTempDeviation()) > 0) {
                 return AlertLevel.ORANGE;
             } else {
                 return AlertLevel.YELLOW;
@@ -132,7 +132,7 @@ public class TempHumidityService {
         } else {
             if (maxDev.compareTo(thresholds.getRedHumidityDeviation()) > 0) {
                 return AlertLevel.RED;
-            } else if (maxDev.compareTo(thresholds.getOrangeHumidityDeviation()) > 0) {
+            } else if (maxDev.compareTo(thresholds.getYellowHumidityDeviation()) > 0) {
                 return AlertLevel.ORANGE;
             } else {
                 return AlertLevel.YELLOW;

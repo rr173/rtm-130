@@ -245,7 +245,7 @@ public class ColdChainDisposalService {
                     continue;
                 }
 
-                List<AlertEvent> chain = alertEventRepository.findAlertChain(alert.getId());
+                List<AlertEvent> chain = buildFullChain(alert);
                 AlertEvent highest = chain.stream()
                         .max((a, b) -> Integer.compare(a.getAlertLevel().getSeverity(), b.getAlertLevel().getSeverity()))
                         .orElse(alert);
@@ -286,6 +286,21 @@ public class ColdChainDisposalService {
 
         dto.setAbnormalRecords(records);
         return dto;
+    }
+
+    private List<AlertEvent> buildFullChain(AlertEvent root) {
+        List<AlertEvent> chain = new ArrayList<>();
+        chain.add(root);
+        collectChainChildren(root.getId(), chain);
+        return chain;
+    }
+
+    private void collectChainChildren(Long parentId, List<AlertEvent> chain) {
+        List<AlertEvent> children = alertEventRepository.findByParentAlertId(parentId);
+        for (AlertEvent child : children) {
+            chain.add(child);
+            collectChainChildren(child.getId(), chain);
+        }
     }
 
     public List<ColdChainDisposalRecord> getDisposalRecordsByAlertId(Long alertId) {

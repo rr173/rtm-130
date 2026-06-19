@@ -96,14 +96,19 @@ public class AlertService {
         upgradedAlert.setPointCode(originalAlert.getPointCode());
         upgradedAlert.setAlertLevel(newLevel);
         upgradedAlert.setAlertStatus(AlertStatus.ACTIVE);
-        upgradedAlert.setTriggerTemperature(reading.getTemperature());
-        upgradedAlert.setTriggerHumidity(reading.getHumidity());
+        if (reading != null) {
+            upgradedAlert.setTriggerTemperature(reading.getTemperature());
+            upgradedAlert.setTriggerHumidity(reading.getHumidity());
+        } else {
+            upgradedAlert.setTriggerTemperature(originalAlert.getTriggerTemperature());
+            upgradedAlert.setTriggerHumidity(originalAlert.getTriggerHumidity());
+        }
         upgradedAlert.setTempLowerLimit(originalAlert.getTempLowerLimit());
         upgradedAlert.setTempUpperLimit(originalAlert.getTempUpperLimit());
         upgradedAlert.setHumidityLowerLimit(originalAlert.getHumidityLowerLimit());
         upgradedAlert.setHumidityUpperLimit(originalAlert.getHumidityUpperLimit());
         upgradedAlert.setFirstTriggerTime(originalAlert.getFirstTriggerTime());
-        upgradedAlert.setLastTriggerTime(reading.getCollectTime());
+        upgradedAlert.setLastTriggerTime(reading != null ? reading.getCollectTime() : LocalDateTime.now());
         upgradedAlert.setParentAlertId(originalAlert.getId());
         upgradedAlert.setDescription("告警升级: " + originalAlert.getAlertLevel().getDescription()
                 + " -> " + newLevel.getDescription() + ", 原因: " + reason
@@ -128,26 +133,38 @@ public class AlertService {
     @Transactional
     public void resolveAlert(AlertEvent alert, LocalDateTime resolvedTime,
                               String resolvedBy, String remark) {
-        alert.setAlertStatus(AlertStatus.RESOLVED);
-        alert.setResolvedTime(resolvedTime);
-        alert.setResolvedBy(resolvedBy);
-        alert.setResolvedRemark(remark);
-        alertEventRepository.save(alert);
+        AlertEvent rootAlert = findRootAlert(alert);
+        resolveAlertChain(rootAlert, resolvedTime, resolvedBy, remark);
 
-        List<AlertEvent> children = alertEventRepository.findByParentAlertId(alert.getId());
-        for (AlertEvent child : children) {
-            if (child.getAlertStatus() == AlertStatus.ACTIVE) {
-                child.setAlertStatus(AlertStatus.RESOLVED);
-                child.setResolvedTime(resolvedTime);
-                child.setResolvedBy(resolvedBy);
-                child.setResolvedRemark(remark);
-                alertEventRepository.save(child);
-            }
+        log.info("告警恢复: rootAlertId={}, resolvedBy={}, duration={}分钟",
+                rootAlert.getId(), resolvedBy,
+                Duration.between(rootAlert.getFirstTriggerTime(), resolvedTime).toMinutes());
+    }
+
+    private AlertEvent findRootAlert(AlertEvent alert) {
+        AlertEvent current = alert;
+        while (current.getParentAlertId() != null) {
+            current = alertEventRepository.findById(current.getParentAlertId())
+                    .orElse(null);
+            if (current == null) break;
+        }
+        return current != null ? current : alert;
+    }
+
+    private void resolveAlertChain(AlertEvent root, LocalDateTime resolvedTime,
+                                    String resolvedBy, String remark) {
+        if (root.getAlertStatus() != AlertStatus.RESOLVED) {
+            root.setAlertStatus(AlertStatus.RESOLVED);
+            root.setResolvedTime(resolvedTime);
+            root.setResolvedBy(resolvedBy);
+            root.setResolvedRemark(remark);
+            alertEventRepository.save(root);
         }
 
-        log.info("告警恢复: alertId={}, level={}, resolvedBy={}, duration={}分钟",
-                alert.getId(), alert.getAlertLevel(), resolvedBy,
-                Duration.between(alert.getFirstTriggerTime(), resolvedTime).toMinutes());
+        List<AlertEvent> children = alertEventRepository.findByParentAlertId(root.getId());
+        for (AlertEvent child : children) {
+            resolveAlertChain(child, resolvedTime, resolvedBy, remark);
+        }
     }
 
     @Transactional
@@ -237,7 +254,20 @@ public class AlertService {
     }
 
     public List<AlertEvent> getAlertChain(Long alertId) {
-        return alertEventRepository.findAlertChain(alertId);
+        AlertEvent root = findRootAlert(alertEventRepository.findById(alertId)
+                .orElseThrow(() -> new ResourceNotFoundException("告警不存在: " + alertId)));
+        List<AlertEvent> chain = new ArrayList<>();
+        chain.add(root);
+        collectChildren(root.getId(), chain);
+        return chain;
+    }
+
+    private void collectChildren(Long parentId, List<AlertEvent> chain) {
+        List<AlertEvent> children = alertEventRepository.findByParentAlertId(parentId);
+        for (AlertEvent child : children) {
+            chain.add(child);
+            collectChildren(child.getId(), chain);
+        }
     }
 
     private AlertEventDTO convertToDTO(AlertEvent alert) {
