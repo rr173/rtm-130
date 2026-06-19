@@ -145,11 +145,11 @@ public class BatchService {
             candidateBatches = drugBatchRepository.findByDrugCodeOrderByExpiryDateAsc(drugCode);
         } else {
             if (level == ExpiryWarningLevel.RED) {
-                candidateBatches = drugBatchRepository.findBatchesExpiringBetween(today, redThreshold);
+                candidateBatches = drugBatchRepository.findBatchesExpiringBetween(today, redThreshold, EXCLUDED_BATCH_STATUSES);
             } else if (level == ExpiryWarningLevel.YELLOW) {
-                candidateBatches = drugBatchRepository.findBatchesExpiringBetween(redThreshold.plusDays(1), yellowThreshold);
+                candidateBatches = drugBatchRepository.findBatchesExpiringBetween(redThreshold.plusDays(1), yellowThreshold, EXCLUDED_BATCH_STATUSES);
             } else {
-                candidateBatches = drugBatchRepository.findBatchesExpiringBefore(yellowThreshold);
+                candidateBatches = drugBatchRepository.findBatchesExpiringBefore(yellowThreshold, EXCLUDED_BATCH_STATUSES);
             }
         }
 
@@ -292,7 +292,7 @@ public class BatchService {
         result.setBatchNo(dto.getBatchNo());
         result.setLockedRemainingQuantity(lockedQty);
         result.setAffectedPatientCount((int) patientMap.values().stream()
-                .map(BatchRecallResultDTO.AffectedPatientDTO::getPatientId)
+                .map(AffectedPatientDTO::getPatientId)
                 .distinct().count());
         result.setAffectedPrescriptionCount(prescriptionNos.size());
         result.setAffectedPatients(new ArrayList<>(patientMap.values()));
