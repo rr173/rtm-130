@@ -5,7 +5,10 @@ public enum InventoryLogType {
     PREOCCUPY("预占"),
     DISPENSE("发药扣减"),
     RELEASE("释放预占"),
-    ADJUST("盘点修正");
+    ADJUST("盘点修正"),
+    RETURN_STOCK("退药回库"),
+    RETURN_LOSS("退药报损"),
+    RETURN_PENDING("退药待处理");
 
     private final String description;
 

@@ -11,7 +11,9 @@ public enum BatchLogType {
     UNLOCK("解锁批次"),
     RECALL("批次召回"),
     EXPIRE_LOCK("过期自动锁定"),
-    ADJUST("批次盘点修正");
+    ADJUST("批次盘点修正"),
+    RETURN_STOCK("退药回库"),
+    RETURN_LOSS("退药报损");
 
     private final String description;
 
