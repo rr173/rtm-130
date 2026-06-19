@@ -4,15 +4,21 @@ import com.pharmacy.entity.Contraindication;
 import com.pharmacy.entity.DispensingWindow;
 import com.pharmacy.entity.Doctor;
 import com.pharmacy.entity.Drug;
+import com.pharmacy.entity.DrugBatch;
+import com.pharmacy.entity.MonitoringPoint;
+import com.pharmacy.enums.BatchStatus;
 import com.pharmacy.enums.ContraindicationLevel;
 import com.pharmacy.enums.DispenseChannel;
 import com.pharmacy.enums.DispensingWindowStatus;
 import com.pharmacy.enums.DrugCategory;
+import com.pharmacy.enums.MonitoringPointType;
 import com.pharmacy.enums.PrescriptionType;
 import com.pharmacy.repository.ContraindicationRepository;
 import com.pharmacy.repository.DispensingWindowRepository;
 import com.pharmacy.repository.DoctorRepository;
+import com.pharmacy.repository.DrugBatchRepository;
 import com.pharmacy.repository.DrugRepository;
+import com.pharmacy.repository.MonitoringPointRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -20,6 +26,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
 
@@ -32,15 +39,20 @@ public class DataInitializer implements CommandLineRunner {
     private final DoctorRepository doctorRepository;
     private final ContraindicationRepository contraindicationRepository;
     private final DispensingWindowRepository dispensingWindowRepository;
+    private final MonitoringPointRepository monitoringPointRepository;
+    private final DrugBatchRepository drugBatchRepository;
 
     @Override
     @Transactional
     public void run(String... args) {
         log.info("开始初始化基础数据...");
         initDrugs();
+        initColdChainDrugs();
         initDoctors();
         initContraindications();
         initDispensingWindows();
+        initMonitoringPoints();
+        initColdChainBatches();
         log.info("基础数据初始化完成");
     }
 
@@ -223,5 +235,142 @@ public class DataInitializer implements CommandLineRunner {
         window.setStatus(DispensingWindowStatus.IDLE);
         window.setServiceChannel(serviceChannel);
         return window;
+    }
+
+    private void initColdChainDrugs() {
+        if (drugRepository.existsByDrugCode("VAC001")) {
+            log.info("冷链药品数据已存在，跳过初始化");
+            return;
+        }
+
+        List<Drug> coldChainDrugs = Arrays.asList(
+            createDrug("VAC001", "新冠灭活疫苗", "0.5ml/支", "支", DrugCategory.VACCINE,
+                    new BigDecimal("0.5"), "ml", "灭活新型冠状病毒抗原", 500, 0),
+            createDrug("VAC002", "流感疫苗", "0.5ml/支", "支", DrugCategory.VACCINE,
+                    new BigDecimal("0.5"), "ml", "流感病毒血凝素抗原", 300, 0),
+            createDrug("VAC003", "乙肝疫苗", "10μg/0.5ml", "支", DrugCategory.VACCINE,
+                    new BigDecimal("0.5"), "ml", "重组乙型肝炎病毒表面抗原", 400, 0),
+            createDrug("BIO001", "重组人干扰素α2b注射液", "300万IU/1ml", "支", DrugCategory.BIOLOGICAL,
+                    new BigDecimal("1"), "ml", "重组人干扰素α2b", 200, 0),
+            createDrug("BIO002", "注射用重组人白介素-2", "20万IU/瓶", "瓶", DrugCategory.BIOLOGICAL,
+                    new BigDecimal("1"), "瓶", "重组人白介素-2", 150, 0),
+            createDrug("INS001", "精蛋白生物合成人胰岛素注射液", "300IU/3ml", "支", DrugCategory.INSULIN,
+                    new BigDecimal("300"), "IU", "低精蛋白锌胰岛素", 180, 0),
+            createDrug("INS002", "门冬胰岛素注射液", "300IU/3ml", "支", DrugCategory.INSULIN,
+                    new BigDecimal("300"), "IU", "门冬胰岛素", 160, 0),
+            createDrug("NOR001", "复方氨基酸注射液", "250ml/瓶", "瓶", DrugCategory.NORMAL,
+                    new BigDecimal("250"), "ml", "多种氨基酸", 250, 0)
+        );
+
+        drugRepository.saveAll(coldChainDrugs);
+        log.info("初始化冷链药品数据完成，共{}种药品", coldChainDrugs.size());
+    }
+
+    private void initMonitoringPoints() {
+        if (monitoringPointRepository.count() > 0) {
+            log.info("监控点数据已存在，跳过初始化");
+            return;
+        }
+
+        MonitoringPoint refrigerator2to8 = new MonitoringPoint();
+        refrigerator2to8.setPointCode("MP-R001");
+        refrigerator2to8.setPointName("1号冷藏柜(2-8℃)");
+        refrigerator2to8.setPointType(MonitoringPointType.REFRIGERATOR);
+        refrigerator2to8.setLocationDescription("药房一楼冷库区A1位置，专用于存放疫苗类药品");
+        refrigerator2to8.setTempMin(new BigDecimal("2.00"));
+        refrigerator2to8.setTempMax(new BigDecimal("8.00"));
+        refrigerator2to8.setHumidityMin(new BigDecimal("35.00"));
+        refrigerator2to8.setHumidityMax(new BigDecimal("75.00"));
+        refrigerator2to8.setEnabled(true);
+        refrigerator2to8.setBoundBatchNos(Arrays.asList("VAC-B-20250101", "VAC-B-20250215", "VAC-B-20250310"));
+
+        MonitoringPoint coolCabinet10to20 = new MonitoringPoint();
+        coolCabinet10to20.setPointCode("MP-C001");
+        coolCabinet10to20.setPointName("1号阴凉柜(10-20℃)");
+        coolCabinet10to20.setPointType(MonitoringPointType.COOL_CABINET);
+        coolCabinet10to20.setLocationDescription("药房一楼阴凉区B2位置，用于存放生物制剂和胰岛素");
+        coolCabinet10to20.setTempMin(new BigDecimal("10.00"));
+        coolCabinet10to20.setTempMax(new BigDecimal("20.00"));
+        coolCabinet10to20.setHumidityMin(new BigDecimal("40.00"));
+        coolCabinet10to20.setHumidityMax(new BigDecimal("70.00"));
+        coolCabinet10to20.setEnabled(true);
+        coolCabinet10to20.setBoundBatchNos(Arrays.asList("BIO-B-20250120", "BIO-B-20250301", "INS-B-20250201"));
+
+        MonitoringPoint normalArea = new MonitoringPoint();
+        normalArea.setPointCode("MP-N001");
+        normalArea.setPointName("常温存储区");
+        normalArea.setPointType(MonitoringPointType.NORMAL_AREA);
+        normalArea.setLocationDescription("药房二楼常规药品存储区，温度0-30℃");
+        normalArea.setTempMin(new BigDecimal("0.00"));
+        normalArea.setTempMax(new BigDecimal("30.00"));
+        normalArea.setHumidityMin(new BigDecimal("30.00"));
+        normalArea.setHumidityMax(new BigDecimal("80.00"));
+        normalArea.setEnabled(true);
+        normalArea.setBoundBatchNos(Arrays.asList("NOR-B-20250115"));
+
+        List<MonitoringPoint> points = Arrays.asList(refrigerator2to8, coolCabinet10to20, normalArea);
+        monitoringPointRepository.saveAll(points);
+        log.info("初始化监控点数据完成，共{}个监控点", points.size());
+        log.info("  - MP-R001: 2-8℃冷藏柜，绑定疫苗类批次");
+        log.info("  - MP-C001: 10-20℃阴凉柜，绑定生物制剂和胰岛素批次");
+        log.info("  - MP-N001: 常温存储区，0-30℃");
+    }
+
+    private void initColdChainBatches() {
+        if (drugBatchRepository.count() > 20) {
+            log.info("药品批次数据较多，跳过冷链批次初始化");
+            return;
+        }
+
+        List<DrugBatch> coldChainBatches = Arrays.asList(
+            createBatch("VAC001", "新冠灭活疫苗", "VAC-B-20250101",
+                    LocalDate.of(2025, 1, 1), LocalDate.of(2026, 12, 31),
+                    500, new BigDecimal("128.00")),
+            createBatch("VAC002", "流感疫苗", "VAC-B-20250215",
+                    LocalDate.of(2025, 2, 15), LocalDate.of(2026, 8, 14),
+                    300, new BigDecimal("156.00")),
+            createBatch("VAC003", "乙肝疫苗", "VAC-B-20250310",
+                    LocalDate.of(2025, 3, 10), LocalDate.of(2028, 3, 9),
+                    400, new BigDecimal("89.00")),
+            createBatch("BIO001", "重组人干扰素α2b注射液", "BIO-B-20250120",
+                    LocalDate.of(2025, 1, 20), LocalDate.of(2027, 1, 19),
+                    200, new BigDecimal("298.00")),
+            createBatch("BIO002", "注射用重组人白介素-2", "BIO-B-20250301",
+                    LocalDate.of(2025, 3, 1), LocalDate.of(2026, 8, 31),
+                    150, new BigDecimal("560.00")),
+            createBatch("INS001", "精蛋白生物合成人胰岛素注射液", "INS-B-20250201",
+                    LocalDate.of(2025, 2, 1), LocalDate.of(2027, 1, 31),
+                    180, new BigDecimal("198.00")),
+            createBatch("INS002", "门冬胰岛素注射液", "INS-B-20250410",
+                    LocalDate.of(2025, 4, 10), LocalDate.of(2027, 4, 9),
+                    160, new BigDecimal("245.00")),
+            createBatch("NOR001", "复方氨基酸注射液", "NOR-B-20250115",
+                    LocalDate.of(2025, 1, 15), LocalDate.of(2026, 7, 14),
+                    250, new BigDecimal("78.00"))
+        );
+
+        drugBatchRepository.saveAll(coldChainBatches);
+        log.info("初始化冷链药品批次数据完成，共{}个批次", coldChainBatches.size());
+    }
+
+    private DrugBatch createBatch(String drugCode, String drugName, String batchNo,
+                                   LocalDate productionDate, LocalDate expiryDate,
+                                   int quantity, BigDecimal purchasePrice) {
+        DrugBatch batch = new DrugBatch();
+        batch.setDrugCode(drugCode);
+        batch.setDrugName(drugName);
+        batch.setBatchNo(batchNo);
+        batch.setProductionDate(productionDate);
+        batch.setExpiryDate(expiryDate);
+        batch.setTotalQuantity(quantity);
+        batch.setAvailableQuantity(quantity);
+        batch.setPreoccupiedQuantity(0);
+        batch.setSplitQuantity(0);
+        batch.setDispensedQuantity(0);
+        batch.setStatus(BatchStatus.NORMAL);
+        batch.setSplitLocked(false);
+        batch.setPurchasePrice(purchasePrice);
+        batch.setOperator("SYSTEM");
+        return batch;
     }
 }

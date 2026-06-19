@@ -29,7 +29,8 @@ import java.util.stream.Collectors;
 public class BatchService {
 
     private static final List<BatchStatus> EXCLUDED_BATCH_STATUSES = List.of(
-            BatchStatus.LOCKED, BatchStatus.RECALLED, BatchStatus.EXPIRED);
+            BatchStatus.LOCKED, BatchStatus.RECALLED, BatchStatus.EXPIRED,
+            BatchStatus.COLD_CHAIN_PENDING, BatchStatus.COLD_CHAIN_REJECTED);
 
     private final DrugRepository drugRepository;
     private final DrugBatchRepository drugBatchRepository;

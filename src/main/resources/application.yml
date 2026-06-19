@@ -40,3 +40,29 @@ logging:
     root: INFO
     com.pharmacy: DEBUG
     org.hibernate.SQL: INFO
+
+cold-chain:
+  alert-upgrade-interval: 60000
+  category-tolerances:
+    VACCINE:
+      max-tolerance-minutes: 30
+      extreme-temperature: 10.00
+    BIOLOGICAL:
+      max-tolerance-minutes: 60
+      extreme-temperature: 15.00
+    INSULIN:
+      max-tolerance-minutes: 60
+      extreme-temperature: 15.00
+    NORMAL:
+      max-tolerance-minutes: 120
+      extreme-temperature: 25.00
+  alert-thresholds:
+    yellow-temp-deviation: 2.00
+    yellow-humidity-deviation: 5.00
+    orange-temp-deviation: 5.00
+    orange-humidity-deviation: 10.00
+    red-temp-deviation: 5.00
+    red-humidity-deviation: 20.00
+  upgrade-thresholds:
+    yellow-to-orange-minutes: 10
+    orange-to-red-minutes: 30

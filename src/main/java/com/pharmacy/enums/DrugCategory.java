@@ -8,7 +8,10 @@ public enum DrugCategory {
     CARDIOVASCULAR("心血管"),
     GASTROINTESTINAL("消化系统"),
     RESPIRATORY("呼吸系统"),
-    EXTERNAL("外用药品");
+    EXTERNAL("外用药品"),
+    VACCINE("疫苗"),
+    BIOLOGICAL("生物制剂"),
+    INSULIN("胰岛素");
 
     private final String description;
 
