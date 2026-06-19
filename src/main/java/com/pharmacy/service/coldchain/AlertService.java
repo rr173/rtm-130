@@ -8,6 +8,7 @@ import com.pharmacy.entity.MonitoringPoint;
 import com.pharmacy.entity.TempHumidityReading;
 import com.pharmacy.enums.AlertLevel;
 import com.pharmacy.enums.AlertStatus;
+import com.pharmacy.enums.AlertType;
 import com.pharmacy.enums.BatchStatus;
 import com.pharmacy.exception.ResourceNotFoundException;
 import com.pharmacy.repository.AlertEventRepository;
@@ -194,6 +195,48 @@ public class AlertService {
                 point.getPointCode(), redAlert.getId(), batchesToUpdate.size());
     }
 
+    @Transactional
+    public AlertEvent createOfflineAlert(MonitoringPoint point, LocalDateTime lastReportTime) {
+        List<AlertStatus> activeStatuses = List.of(AlertStatus.ACTIVE);
+        List<AlertEvent> existingOfflineAlerts = alertEventRepository.findByPointCodeAndAlertTypeAndAlertStatusIn(
+                point.getPointCode(), AlertType.SENSOR_OFFLINE, activeStatuses);
+        if (!existingOfflineAlerts.isEmpty()) {
+            log.debug("监控点{}已存在活动离线告警，跳过创建", point.getPointCode());
+            return existingOfflineAlerts.get(0);
+        }
+
+        AlertEvent alert = new AlertEvent();
+        alert.setPointCode(point.getPointCode());
+        alert.setAlertLevel(AlertLevel.RED);
+        alert.setAlertType(AlertType.SENSOR_OFFLINE);
+        alert.setAlertStatus(AlertStatus.ACTIVE);
+        alert.setFirstTriggerTime(LocalDateTime.now());
+        alert.setLastTriggerTime(LocalDateTime.now());
+        alert.setDescription("传感器离线告警 - 监控点[" + point.getPointName() + "]超过"
+                + (point.getReportIntervalMinutes() * coldChainConfig.getOfflineDetection().getMissedIntervalsThreshold())
+                + "分钟未上报数据，最近上报时间: "
+                + (lastReportTime != null ? lastReportTime : "无记录"));
+        alert = alertEventRepository.save(alert);
+
+        log.warn("创建传感器离线告警: pointCode={}, id={}, lastReportTime={}",
+                point.getPointCode(), alert.getId(), lastReportTime);
+
+        triggerColdChainInterruption(point, alert);
+
+        return alert;
+    }
+
+    @Transactional
+    public void resolveOfflineAlerts(String pointCode, LocalDateTime resolvedTime) {
+        List<AlertStatus> activeStatuses = List.of(AlertStatus.ACTIVE);
+        List<AlertEvent> offlineAlerts = alertEventRepository.findByPointCodeAndAlertTypeAndAlertStatusIn(
+                pointCode, AlertType.SENSOR_OFFLINE, activeStatuses);
+        for (AlertEvent alert : offlineAlerts) {
+            resolveAlert(alert, resolvedTime, "SYSTEM", "传感器恢复在线，收到新的上报数据");
+            log.info("离线告警已恢复: alertId={}, pointCode={}", alert.getId(), pointCode);
+        }
+    }
+
     public List<AlertEventDTO> getActiveAlertsByLevel(AlertLevel level) {
         List<AlertStatus> activeStatuses = List.of(AlertStatus.ACTIVE);
         List<AlertEvent> alerts;
@@ -278,6 +321,8 @@ public class AlertService {
                 .ifPresent(p -> dto.setPointName(p.getPointName()));
         dto.setAlertLevel(alert.getAlertLevel());
         dto.setAlertLevelDescription(alert.getAlertLevel().getDescription());
+        dto.setAlertType(alert.getAlertType());
+        dto.setAlertTypeDescription(alert.getAlertType().getDescription());
         dto.setAlertStatus(alert.getAlertStatus());
         dto.setAlertStatusDescription(alert.getAlertStatus().getDescription());
         dto.setTriggerTemperature(alert.getTriggerTemperature());

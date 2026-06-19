@@ -2,6 +2,7 @@ package com.pharmacy.entity;
 
 import com.pharmacy.enums.AlertLevel;
 import com.pharmacy.enums.AlertStatus;
+import com.pharmacy.enums.AlertType;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.hibernate.annotations.CreationTimestamp;
@@ -31,6 +32,10 @@ public class AlertEvent {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private AlertLevel alertLevel;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private AlertType alertType = AlertType.TEMPERATURE_HUMIDITY;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)

@@ -66,3 +66,12 @@ cold-chain:
   upgrade-thresholds:
     yellow-to-orange-minutes: 10
     orange-to-red-minutes: 30
+  offline-detection:
+    check-interval-ms: 60000
+    missed-intervals-threshold: 3
+  inspection:
+    cron-expression: "0 0 8 * * ?"
+    frequency-check-hours: 24
+    frequency-pass-ratio: 0.8
+    trend-check-readings: 10
+    trend-temp-diff-threshold: 2.00

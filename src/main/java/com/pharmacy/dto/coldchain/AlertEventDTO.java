@@ -2,6 +2,7 @@ package com.pharmacy.dto.coldchain;
 
 import com.pharmacy.enums.AlertLevel;
 import com.pharmacy.enums.AlertStatus;
+import com.pharmacy.enums.AlertType;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -15,6 +16,8 @@ public class AlertEventDTO {
     private String pointName;
     private AlertLevel alertLevel;
     private String alertLevelDescription;
+    private AlertType alertType;
+    private String alertTypeDescription;
     private AlertStatus alertStatus;
     private String alertStatusDescription;
     private BigDecimal triggerTemperature;

@@ -52,6 +52,14 @@ public class MonitoringPoint {
     @Column(nullable = false)
     private Boolean enabled = true;
 
+    @Column(nullable = false)
+    private Integer reportIntervalMinutes = 5;
+
+    @Column(nullable = false)
+    private Boolean online = true;
+
+    private LocalDateTime lastReportTime;
+
     @ElementCollection
     @CollectionTable(name = "monitoring_point_batch", joinColumns = @JoinColumn(name = "point_id"))
     @Column(name = "batch_no", length = 100)

@@ -20,6 +20,10 @@ public class ColdChainConfig {
 
     private UpgradeThresholds upgradeThresholds = new UpgradeThresholds();
 
+    private OfflineDetectionConfig offlineDetection = new OfflineDetectionConfig();
+
+    private InspectionConfig inspection = new InspectionConfig();
+
     @Data
     public static class CategoryTolerance {
         private BigDecimal maxToleranceMinutes;
@@ -40,6 +44,21 @@ public class ColdChainConfig {
     public static class UpgradeThresholds {
         private int yellowToOrangeMinutes = 10;
         private int orangeToRedMinutes = 30;
+    }
+
+    @Data
+    public static class OfflineDetectionConfig {
+        private int checkIntervalMs = 60000;
+        private int missedIntervalsThreshold = 3;
+    }
+
+    @Data
+    public static class InspectionConfig {
+        private String cronExpression = "0 0 8 * * ?";
+        private int frequencyCheckHours = 24;
+        private double frequencyPassRatio = 0.8;
+        private int trendCheckReadings = 10;
+        private BigDecimal trendTempDiffThreshold = new BigDecimal("2.00");
     }
 
     public BigDecimal getMaxToleranceMinutes(DrugCategory category) {

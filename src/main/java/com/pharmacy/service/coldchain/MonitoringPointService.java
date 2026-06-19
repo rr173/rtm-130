@@ -55,6 +55,8 @@ public class MonitoringPointService {
         point.setHumidityMin(dto.getHumidityMin());
         point.setHumidityMax(dto.getHumidityMax());
         point.setEnabled(dto.getEnabled() != null ? dto.getEnabled() : true);
+        point.setReportIntervalMinutes(dto.getReportIntervalMinutes() != null ? dto.getReportIntervalMinutes() : 5);
+        point.setOnline(true);
         if (dto.getBoundBatchNos() != null) {
             point.setBoundBatchNos(dto.getBoundBatchNos());
         }
@@ -104,18 +106,27 @@ public class MonitoringPointService {
         dto.setHumidityMin(point.getHumidityMin());
         dto.setHumidityMax(point.getHumidityMax());
         dto.setEnabled(point.getEnabled());
+        dto.setReportIntervalMinutes(point.getReportIntervalMinutes());
+        dto.setOnline(point.getOnline());
+        dto.setLastReportTime(point.getLastReportTime());
         dto.setBoundBatchNos(point.getBoundBatchNos());
 
         readingRepository.findTopByPointCodeOrderByCollectTimeDesc(point.getPointCode())
                 .ifPresent(reading -> {
                     dto.setCurrentTemperature(reading.getTemperature());
                     dto.setCurrentHumidity(reading.getHumidity());
-                    if (reading.getTempOutOfRange() || reading.getHumidityOutOfRange()) {
+                    if (!point.getOnline()) {
+                        dto.setCurrentStatus("离线");
+                    } else if (reading.getTempOutOfRange() || reading.getHumidityOutOfRange()) {
                         dto.setCurrentStatus("超标");
                     } else {
                         dto.setCurrentStatus("正常");
                     }
                 });
+
+        if (dto.getCurrentStatus() == null) {
+            dto.setCurrentStatus(point.getOnline() ? "正常" : "离线");
+        }
 
         return dto;
     }

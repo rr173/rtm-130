@@ -23,6 +23,9 @@ public class MonitoringPointDTO {
     private BigDecimal humidityMin;
     private BigDecimal humidityMax;
     private Boolean enabled;
+    private Integer reportIntervalMinutes;
+    private Boolean online;
+    private java.time.LocalDateTime lastReportTime;
     private List<String> boundBatchNos;
     private BigDecimal currentTemperature;
     private BigDecimal currentHumidity;

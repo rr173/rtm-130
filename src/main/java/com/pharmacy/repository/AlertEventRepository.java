@@ -3,6 +3,7 @@ package com.pharmacy.repository;
 import com.pharmacy.entity.AlertEvent;
 import com.pharmacy.enums.AlertLevel;
 import com.pharmacy.enums.AlertStatus;
+import com.pharmacy.enums.AlertType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -55,4 +56,11 @@ public interface AlertEventRepository extends JpaRepository<AlertEvent, Long> {
 
     @Query("SELECT a FROM AlertEvent a WHERE a.id = :alertId OR a.parentAlertId = :alertId ORDER BY a.firstTriggerTime ASC")
     List<AlertEvent> findAlertChain(@Param("alertId") Long alertId);
+
+    @Query("SELECT a FROM AlertEvent a WHERE a.pointCode = :pointCode AND a.alertType = :alertType " +
+           "AND a.alertStatus IN :statuses ORDER BY a.firstTriggerTime DESC")
+    List<AlertEvent> findByPointCodeAndAlertTypeAndAlertStatusIn(
+            @Param("pointCode") String pointCode,
+            @Param("alertType") AlertType alertType,
+            @Param("statuses") List<AlertStatus> statuses);
 }

@@ -33,6 +33,7 @@ public class TempHumidityService {
     private final AlertEventRepository alertEventRepository;
     private final ColdChainConfig coldChainConfig;
     private final AlertService alertService;
+    private final OfflineDetectionService offlineDetectionService;
 
     @Transactional
     public TempHumidityReadingDTO reportReading(TempHumidityReportDTO reportDTO) {
@@ -51,6 +52,8 @@ public class TempHumidityService {
         reading.setHumidityOutOfRange(humidityOutOfRange);
         reading.setRemark(reportDTO.getRemark());
         reading = readingRepository.save(reading);
+
+        offlineDetectionService.markPointOnline(point.getPointCode(), reading.getCollectTime());
 
         if (tempOutOfRange || humidityOutOfRange) {
             handleOutOfRange(point, reading);
