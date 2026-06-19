@@ -7,6 +7,7 @@ import com.pharmacy.entity.DispensingWindow;
 import com.pharmacy.entity.Prescription;
 import com.pharmacy.enums.DispensingWindowStatus;
 import com.pharmacy.enums.PrescriptionStatus;
+import com.pharmacy.enums.PrescriptionType;
 import com.pharmacy.enums.QueueItemStatus;
 import com.pharmacy.exception.BusinessException;
 import com.pharmacy.exception.ResourceNotFoundException;
@@ -33,6 +34,11 @@ public class DispenseQueueService {
     private static final int AVERAGE_DISPENSE_MINUTES = 5;
     private static final int TIMEOUT_MINUTES = 15;
     private static final int MAX_RETURN_COUNT = 3;
+
+    private static final int PRIORITY_RETURNED_EMERGENCY = 10;
+    private static final int PRIORITY_RETURNED_NORMAL = 20;
+    private static final int PRIORITY_NEW_EMERGENCY = 100;
+    private static final int PRIORITY_NEW_NORMAL = 200;
 
     private final DispenseQueueItemRepository queueItemRepository;
     private final DispensingWindowRepository windowRepository;
@@ -61,6 +67,8 @@ public class DispenseQueueService {
         item.setEnqueueTime(LocalDateTime.now());
         item.setStatus(QueueItemStatus.WAITING);
         item.setReturnCount(0);
+        item.setSortPriority(prescription.getType() == PrescriptionType.EMERGENCY
+                ? PRIORITY_NEW_EMERGENCY : PRIORITY_NEW_NORMAL);
 
         item = queueItemRepository.save(item);
         log.info("处方[{}]已加入队列，排队类型: {}", prescriptionNo, prescription.getType().getDescription());
@@ -244,7 +252,19 @@ public class DispenseQueueService {
         queueItem.setWindowNo(null);
         queueItem.setClaimTime(null);
         queueItem.setReturnCount(queueItem.getReturnCount() + 1);
-        queueItem.setEnqueueTime(LocalDateTime.now());
+
+        int basePriority = queueItem.getPrescriptionType() == PrescriptionType.EMERGENCY
+                ? PRIORITY_RETURNED_EMERGENCY : PRIORITY_RETURNED_NORMAL;
+        queueItem.setSortPriority(basePriority);
+
+        LocalDateTime now = LocalDateTime.now();
+        Optional<LocalDateTime> minEnqueueTime = Optional.ofNullable(
+                queueItemRepository.findMinEnqueueTime(QueueItemStatus.WAITING, basePriority));
+        if (minEnqueueTime.isPresent()) {
+            queueItem.setEnqueueTime(minEnqueueTime.get().minusNanos(1));
+        } else {
+            queueItem.setEnqueueTime(now);
+        }
         queueItemRepository.save(queueItem);
 
         Prescription prescription = prescriptionRepository.findByPrescriptionNoWithLock(prescriptionNo)

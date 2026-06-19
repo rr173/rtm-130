@@ -32,6 +32,9 @@ public class DispenseQueueItem {
     @Column(nullable = false)
     private LocalDateTime enqueueTime;
 
+    @Column(nullable = false)
+    private Integer sortPriority;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private QueueItemStatus status;

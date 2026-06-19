@@ -10,7 +10,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import jakarta.persistence.LockModeType;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -19,10 +18,8 @@ public interface DispenseQueueItemRepository extends JpaRepository<DispenseQueue
 
     Optional<DispenseQueueItem> findByPrescriptionNoAndStatus(String prescriptionNo, QueueItemStatus status);
 
-    List<DispenseQueueItem> findByStatusOrderByPrescriptionTypeAscEnqueueTimeAsc(QueueItemStatus status);
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT q FROM DispenseQueueItem q WHERE q.status = :status ORDER BY q.prescriptionType ASC, q.enqueueTime ASC")
+    @Query("SELECT q FROM DispenseQueueItem q WHERE q.status = :status ORDER BY q.sortPriority ASC, q.enqueueTime ASC")
     List<DispenseQueueItem> findNextWaitingWithLock(@Param("status") QueueItemStatus status, Pageable pageable);
 
     default Optional<DispenseQueueItem> findNextWaiting() {
@@ -30,7 +27,7 @@ public interface DispenseQueueItemRepository extends JpaRepository<DispenseQueue
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
-    @Query("SELECT q FROM DispenseQueueItem q WHERE q.status = :status ORDER BY q.prescriptionType ASC, q.enqueueTime ASC")
+    @Query("SELECT q FROM DispenseQueueItem q WHERE q.status = :status ORDER BY q.sortPriority ASC, q.enqueueTime ASC")
     List<DispenseQueueItem> findAllWaitingOrdered(@Param("status") QueueItemStatus status);
 
     default List<DispenseQueueItem> findAllWaitingOrdered() {
@@ -39,19 +36,25 @@ public interface DispenseQueueItemRepository extends JpaRepository<DispenseQueue
 
     long countByStatus(QueueItemStatus status);
 
-    @Query("SELECT COUNT(q) FROM DispenseQueueItem q WHERE q.status = :status AND q.prescriptionType = 'EMERGENCY'")
+    @Query("SELECT COUNT(q) FROM DispenseQueueItem q WHERE q.status = :status AND q.sortPriority < 200")
     long countEmergencyWaiting(@Param("status") QueueItemStatus status);
 
     default long countEmergencyWaiting() {
         return countEmergencyWaiting(QueueItemStatus.WAITING);
     }
 
-    @Query("SELECT COUNT(q) FROM DispenseQueueItem q WHERE q.status = :status AND q.prescriptionType <> 'EMERGENCY'")
+    @Query("SELECT COUNT(q) FROM DispenseQueueItem q WHERE q.status = :status AND q.sortPriority >= 200")
     long countNormalWaiting(@Param("status") QueueItemStatus status);
 
     default long countNormalWaiting() {
         return countNormalWaiting(QueueItemStatus.WAITING);
     }
+
+    @Query("SELECT MIN(q.sortPriority) FROM DispenseQueueItem q WHERE q.status = :status")
+    Integer findMinSortPriority(@Param("status") QueueItemStatus status);
+
+    @Query("SELECT MIN(q.enqueueTime) FROM DispenseQueueItem q WHERE q.status = :status AND q.sortPriority = :priority")
+    java.time.LocalDateTime findMinEnqueueTime(@Param("status") QueueItemStatus status, @Param("priority") Integer priority);
 
     List<DispenseQueueItem> findByStatusAndWindowNo(QueueItemStatus status, String windowNo);
 
