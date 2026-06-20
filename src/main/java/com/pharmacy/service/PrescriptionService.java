@@ -30,6 +30,7 @@ public class PrescriptionService {
     private final ReviewEngineService reviewEngineService;
     private final InventoryService inventoryService;
     private final DispenseQueueService dispenseQueueService;
+    private final PharmacistReviewService pharmacistReviewService;
 
     @Transactional
     public PrescriptionDTO submitPrescription(PrescriptionSubmitDTO dto) {
@@ -53,30 +54,12 @@ public class PrescriptionService {
 
         updateStatusAfterReview(prescription, reviewResult);
 
-        if (prescription.getStatus() == PrescriptionStatus.REVIEW_PASSED) {
-            boolean preoccupySuccess = inventoryService.preoccupyStock(prescription);
-            if (preoccupySuccess) {
-                prescription.setStatus(PrescriptionStatus.PREOCCUPIED);
-                log.info("处方[{}]审核通过且库存预占成功，状态: {}",
-                        prescription.getPrescriptionNo(), PrescriptionStatus.PREOCCUPIED);
-            } else {
-                prescription.setStatus(PrescriptionStatus.PREOCCUPY_FAILED);
-                log.info("处方[{}]审核通过但库存预占失败，状态: {}",
-                        prescription.getPrescriptionNo(), PrescriptionStatus.PREOCCUPY_FAILED);
-            }
+        if (prescription.getStatus() == PrescriptionStatus.REVIEW_PASSED
+                || prescription.getStatus() == PrescriptionStatus.REVIEW_WARNING) {
+            pharmacistReviewService.sendPrescriptionToTodoPool(prescription);
         }
 
         prescription = prescriptionRepository.save(prescription);
-
-        if (prescription.getStatus() == PrescriptionStatus.PREOCCUPIED) {
-            try {
-                dispenseQueueService.enqueue(prescription.getPrescriptionNo());
-                prescription = prescriptionRepository.findByPrescriptionNo(prescription.getPrescriptionNo())
-                        .orElse(prescription);
-            } catch (Exception e) {
-                log.warn("处方[{}]自动加入配药队列失败: {}", prescription.getPrescriptionNo(), e.getMessage());
-            }
-        }
 
         return PrescriptionDTO.fromEntity(prescription);
     }

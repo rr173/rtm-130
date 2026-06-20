@@ -36,6 +36,17 @@ public class PrescriptionDTO {
     private LocalDateTime dispensedAt;
     private LocalDateTime cancelledAt;
     private String cancelReason;
+    private String claimedByPharmacistId;
+    private String claimedByPharmacistName;
+    private LocalDateTime claimedAt;
+    private LocalDateTime reviewDeadline;
+    private String pharmacistReturnReason;
+    private String pharmacistAttentionReason;
+    private String pharmacistReviewComments;
+    private String reviewedByPharmacistId;
+    private String reviewedByPharmacistName;
+    private LocalDateTime pharmacistReviewedAt;
+    private Boolean isKeyAttention;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -59,6 +70,17 @@ public class PrescriptionDTO {
         dto.setDispensedAt(prescription.getDispensedAt());
         dto.setCancelledAt(prescription.getCancelledAt());
         dto.setCancelReason(prescription.getCancelReason());
+        dto.setClaimedByPharmacistId(prescription.getClaimedByPharmacistId());
+        dto.setClaimedByPharmacistName(prescription.getClaimedByPharmacistName());
+        dto.setClaimedAt(prescription.getClaimedAt());
+        dto.setReviewDeadline(prescription.getReviewDeadline());
+        dto.setPharmacistReturnReason(prescription.getPharmacistReturnReason());
+        dto.setPharmacistAttentionReason(prescription.getPharmacistAttentionReason());
+        dto.setPharmacistReviewComments(prescription.getPharmacistReviewComments());
+        dto.setReviewedByPharmacistId(prescription.getReviewedByPharmacistId());
+        dto.setReviewedByPharmacistName(prescription.getReviewedByPharmacistName());
+        dto.setPharmacistReviewedAt(prescription.getPharmacistReviewedAt());
+        dto.setIsKeyAttention(prescription.getIsKeyAttention());
         dto.setCreatedAt(prescription.getCreatedAt());
         dto.setUpdatedAt(prescription.getUpdatedAt());
 

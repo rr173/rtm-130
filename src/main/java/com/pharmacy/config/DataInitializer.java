@@ -6,6 +6,7 @@ import com.pharmacy.entity.Doctor;
 import com.pharmacy.entity.Drug;
 import com.pharmacy.entity.DrugBatch;
 import com.pharmacy.entity.MonitoringPoint;
+import com.pharmacy.entity.Pharmacist;
 import com.pharmacy.enums.BatchStatus;
 import com.pharmacy.enums.ContraindicationLevel;
 import com.pharmacy.enums.DispenseChannel;
@@ -19,6 +20,7 @@ import com.pharmacy.repository.DoctorRepository;
 import com.pharmacy.repository.DrugBatchRepository;
 import com.pharmacy.repository.DrugRepository;
 import com.pharmacy.repository.MonitoringPointRepository;
+import com.pharmacy.repository.PharmacistRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -41,6 +43,7 @@ public class DataInitializer implements CommandLineRunner {
     private final DispensingWindowRepository dispensingWindowRepository;
     private final MonitoringPointRepository monitoringPointRepository;
     private final DrugBatchRepository drugBatchRepository;
+    private final PharmacistRepository pharmacistRepository;
 
     @Override
     @Transactional
@@ -49,6 +52,7 @@ public class DataInitializer implements CommandLineRunner {
         initDrugs();
         initColdChainDrugs();
         initDoctors();
+        initPharmacists();
         initContraindications();
         initDispensingWindows();
         initMonitoringPoints();
@@ -180,6 +184,37 @@ public class DataInitializer implements CommandLineRunner {
 
         doctorRepository.saveAll(Arrays.asList(doctor1, doctor2));
         log.info("初始化医生数据完成，共{}位医生", 2);
+    }
+
+    private void initPharmacists() {
+        if (pharmacistRepository.count() > 0) {
+            log.info("药师数据已存在，跳过初始化");
+            return;
+        }
+
+        Pharmacist pharmacist1 = new Pharmacist();
+        pharmacist1.setPharmacistId("PHARM001");
+        pharmacist1.setName("王药师");
+        pharmacist1.setTitle("主管药师");
+        pharmacist1.setDepartment("药房");
+        pharmacist1.setActive(true);
+
+        Pharmacist pharmacist2 = new Pharmacist();
+        pharmacist2.setPharmacistId("PHARM002");
+        pharmacist2.setName("刘药师");
+        pharmacist2.setTitle("药师");
+        pharmacist2.setDepartment("药房");
+        pharmacist2.setActive(true);
+
+        Pharmacist pharmacist3 = new Pharmacist();
+        pharmacist3.setPharmacistId("PHARM003");
+        pharmacist3.setName("陈药师");
+        pharmacist3.setTitle("副主任药师");
+        pharmacist3.setDepartment("药房");
+        pharmacist3.setActive(true);
+
+        pharmacistRepository.saveAll(Arrays.asList(pharmacist1, pharmacist2, pharmacist3));
+        log.info("初始化药师数据完成，共{}位药师", 3);
     }
 
     private void initContraindications() {

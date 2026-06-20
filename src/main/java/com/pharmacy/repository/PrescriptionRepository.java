@@ -56,4 +56,36 @@ public interface PrescriptionRepository extends JpaRepository<Prescription, Long
             @Param("endTime") LocalDateTime endTime);
 
     boolean existsByPrescriptionNo(String prescriptionNo);
+
+    @Query("SELECT p FROM Prescription p WHERE p.status = 'PENDING_PHARMACIST_REVIEW' " +
+           "ORDER BY CASE p.type WHEN 'EMERGENCY' THEN 0 ELSE 1 END, p.createdAt ASC")
+    List<Prescription> findTodoPoolPrescriptions();
+
+    @Query("SELECT p FROM Prescription p WHERE p.status = 'PENDING_PHARMACIST_REVIEW' " +
+           "ORDER BY CASE p.type WHEN 'EMERGENCY' THEN 0 ELSE 1 END, p.createdAt ASC")
+    Page<Prescription> findTodoPoolPrescriptions(Pageable pageable);
+
+    @Query("SELECT p FROM Prescription p WHERE p.status = 'IN_PHARMACIST_REVIEW' " +
+           "AND p.claimedByPharmacistId = :pharmacistId ORDER BY p.claimedAt ASC")
+    List<Prescription> findInReviewByPharmacist(@Param("pharmacistId") String pharmacistId);
+
+    @Query("SELECT p FROM Prescription p WHERE p.status = 'IN_PHARMACIST_REVIEW' " +
+           "AND p.reviewDeadline < :now ORDER BY p.reviewDeadline ASC")
+    List<Prescription> findTimeoutReviewPrescriptions(@Param("now") LocalDateTime now);
+
+    @Query("SELECT p FROM Prescription p WHERE p.patientId = :patientId " +
+           "AND p.status = 'DISPENSED' AND p.dispensedAt >= :startTime " +
+           "ORDER BY p.dispensedAt DESC")
+    List<Prescription> findDispensedPrescriptionsForPatient(
+            @Param("patientId") String patientId,
+            @Param("startTime") LocalDateTime startTime);
+
+    @Query("SELECT COUNT(p) FROM Prescription p WHERE p.status = 'PENDING_PHARMACIST_REVIEW'")
+    long countTodoPoolSize();
+
+    @Query("SELECT p FROM Prescription p WHERE p.status = 'PENDING_PHARMACIST_REVIEW' " +
+           "AND p.createdAt BETWEEN :startTime AND :endTime ORDER BY p.createdAt ASC")
+    List<Prescription> findTodoPoolByTimeRange(
+            @Param("startTime") LocalDateTime startTime,
+            @Param("endTime") LocalDateTime endTime);
 }

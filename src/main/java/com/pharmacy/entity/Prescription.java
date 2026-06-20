@@ -84,6 +84,35 @@ public class Prescription {
     @Column(length = 500)
     private String cancelReason;
 
+    @Column(length = 50)
+    private String claimedByPharmacistId;
+
+    @Column(length = 100)
+    private String claimedByPharmacistName;
+
+    private LocalDateTime claimedAt;
+
+    private LocalDateTime reviewDeadline;
+
+    @Column(length = 500)
+    private String pharmacistReturnReason;
+
+    @Column(length = 500)
+    private String pharmacistAttentionReason;
+
+    @Column(length = 2000)
+    private String pharmacistReviewComments;
+
+    @Column(length = 50)
+    private String reviewedByPharmacistId;
+
+    @Column(length = 100)
+    private String reviewedByPharmacistName;
+
+    private LocalDateTime pharmacistReviewedAt;
+
+    private Boolean isKeyAttention = false;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;
