@@ -126,6 +126,12 @@ public class PharmacistReviewService {
             throw new BusinessException("该处方已被其他药师领取，您无法审核");
         }
 
+        if (dto.getConclusion() == PharmacistReviewConclusion.RETURNED_FOR_MODIFICATION) {
+            if (dto.getReturnReason() == null || dto.getReturnReason().trim().isEmpty()) {
+                throw new BusinessException("退回修改时必须填写退回原因");
+            }
+        }
+
         LocalDateTime now = LocalDateTime.now();
         boolean isTimeout = prescription.getReviewDeadline() != null
                 && now.isAfter(prescription.getReviewDeadline());
@@ -490,6 +496,19 @@ public class PharmacistReviewService {
                 timeoutEvent.setClaimedAt(lockedPrescription.getClaimedAt());
                 timeoutEvent.setTimeoutAt(now);
                 timeoutEventRepository.save(timeoutEvent);
+
+                PharmacistReviewRecord timeoutReviewRecord = new PharmacistReviewRecord();
+                timeoutReviewRecord.setPrescription(lockedPrescription);
+                timeoutReviewRecord.setPharmacistId(lockedPrescription.getClaimedByPharmacistId());
+                timeoutReviewRecord.setPharmacistName(lockedPrescription.getClaimedByPharmacistName());
+                timeoutReviewRecord.setConclusion(PharmacistReviewConclusion.TIMEOUT_AUTO_RELEASE);
+                timeoutReviewRecord.setReviewComments("审方超时自动释放");
+                timeoutReviewRecord.setClaimedAt(lockedPrescription.getClaimedAt());
+                timeoutReviewRecord.setReviewedAt(now);
+                timeoutReviewRecord.setReviewDurationSeconds(
+                        ChronoUnit.SECONDS.between(lockedPrescription.getClaimedAt(), now));
+                timeoutReviewRecord.setIsTimeout(true);
+                reviewRecordRepository.save(timeoutReviewRecord);
 
                 lockedPrescription.setStatus(PrescriptionStatus.PENDING_PHARMACIST_REVIEW);
                 lockedPrescription.setClaimedByPharmacistId(null);

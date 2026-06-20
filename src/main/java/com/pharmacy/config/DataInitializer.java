@@ -56,6 +56,7 @@ public class DataInitializer implements CommandLineRunner {
         initContraindications();
         initDispensingWindows();
         initMonitoringPoints();
+        initNormalDrugBatches();
         initColdChainBatches();
         log.info("基础数据初始化完成");
     }
@@ -349,6 +350,55 @@ public class DataInitializer implements CommandLineRunner {
         log.info("  - MP-R001: 2-8℃冷藏柜，绑定疫苗类批次");
         log.info("  - MP-C001: 10-20℃阴凉柜，绑定生物制剂和胰岛素批次");
         log.info("  - MP-N001: 常温存储区，0-30℃");
+    }
+
+    private void initNormalDrugBatches() {
+        if (drugBatchRepository.count() > 12) {
+            log.info("常规药品批次数据已存在，跳过初始化");
+            return;
+        }
+
+        List<DrugBatch> normalBatches = Arrays.asList(
+            createBatch("DRUG001", "阿莫西林胶囊", "B-20250101",
+                    LocalDate.of(2025, 1, 1), LocalDate.of(2027, 12, 31),
+                    100, new BigDecimal("25.80")),
+            createBatch("DRUG002", "布洛芬缓释胶囊", "B-20250215",
+                    LocalDate.of(2025, 2, 15), LocalDate.of(2027, 8, 14),
+                    150, new BigDecimal("18.50")),
+            createBatch("DRUG003", "奥美拉唑肠溶胶囊", "B-20250310",
+                    LocalDate.of(2025, 3, 10), LocalDate.of(2028, 3, 9),
+                    80, new BigDecimal("45.20")),
+            createBatch("DRUG004", "硝苯地平缓释片", "B-20250120",
+                    LocalDate.of(2025, 1, 20), LocalDate.of(2027, 1, 19),
+                    120, new BigDecimal("32.80")),
+            createBatch("DRUG005", "盐酸氨溴索口服溶液", "B-20250301",
+                    LocalDate.of(2025, 3, 1), LocalDate.of(2026, 8, 31),
+                    90, new BigDecimal("28.60")),
+            createBatch("DRUG006", "头孢克肟分散片", "B-20250201",
+                    LocalDate.of(2025, 2, 1), LocalDate.of(2027, 1, 31),
+                    70, new BigDecimal("56.00")),
+            createBatch("DRUG007", "复方甘草片", "B-20250410",
+                    LocalDate.of(2025, 4, 10), LocalDate.of(2027, 4, 9),
+                    200, new BigDecimal("12.50")),
+            createBatch("DRUG008", "维生素C片", "B-20250115",
+                    LocalDate.of(2025, 1, 15), LocalDate.of(2026, 7, 14),
+                    500, new BigDecimal("8.50")),
+            createBatch("DRUG009", "盐酸吗啡注射液", "B-20250220",
+                    LocalDate.of(2025, 2, 20), LocalDate.of(2027, 2, 19),
+                    50, new BigDecimal("35.00")),
+            createBatch("DRUG010", "地西泮片", "B-20250315",
+                    LocalDate.of(2025, 3, 15), LocalDate.of(2028, 3, 14),
+                    30, new BigDecimal("22.00")),
+            createBatch("DRUG011", "红霉素软膏", "B-20250105",
+                    LocalDate.of(2025, 1, 5), LocalDate.of(2027, 1, 4),
+                    300, new BigDecimal("6.80")),
+            createBatch("DRUG012", "氯雷他定片", "B-20250225",
+                    LocalDate.of(2025, 2, 25), LocalDate.of(2028, 2, 24),
+                    110, new BigDecimal("28.00"))
+        );
+
+        drugBatchRepository.saveAll(normalBatches);
+        log.info("初始化常规药品批次数据完成，共{}个批次", normalBatches.size());
     }
 
     private void initColdChainBatches() {
