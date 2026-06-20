@@ -7,6 +7,7 @@ public enum PrescriptionStatus {
     REVIEW_BLOCKED("自动审核拦截"),
     PENDING_PHARMACIST_REVIEW("待药师审核"),
     IN_PHARMACIST_REVIEW("药师审核中"),
+    IN_CONSULTATION("协同会诊中"),
     PENDING_MODIFICATION("待修改"),
     PHARMACIST_REVIEW_PASSED("药师审核通过"),
     KEY_ATTENTION("重点关注"),
