@@ -21,6 +21,7 @@ import com.pharmacy.repository.DrugBatchRepository;
 import com.pharmacy.repository.DrugRepository;
 import com.pharmacy.repository.MonitoringPointRepository;
 import com.pharmacy.repository.PharmacistRepository;
+import com.pharmacy.service.reviewrule.ReviewRuleConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -44,6 +45,7 @@ public class DataInitializer implements CommandLineRunner {
     private final MonitoringPointRepository monitoringPointRepository;
     private final DrugBatchRepository drugBatchRepository;
     private final PharmacistRepository pharmacistRepository;
+    private final ReviewRuleConfigService reviewRuleConfigService;
 
     @Override
     @Transactional
@@ -58,6 +60,7 @@ public class DataInitializer implements CommandLineRunner {
         initMonitoringPoints();
         initNormalDrugBatches();
         initColdChainBatches();
+        reviewRuleConfigService.initializeDefaultConfig();
         log.info("基础数据初始化完成");
     }
 
