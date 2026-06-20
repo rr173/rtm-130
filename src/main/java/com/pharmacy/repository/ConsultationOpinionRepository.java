@@ -19,6 +19,13 @@ public interface ConsultationOpinionRepository extends JpaRepository<Consultatio
 
     List<ConsultationOpinion> findByPharmacistIdOrderByCreatedAtDesc(String pharmacistId);
 
+    @Query("SELECT DISTINCT o FROM ConsultationOpinion o " +
+           "LEFT JOIN FETCH o.consultation c " +
+           "LEFT JOIN FETCH c.prescription " +
+           "WHERE o.pharmacistId = :pharmacistId " +
+           "ORDER BY o.createdAt DESC")
+    List<ConsultationOpinion> findDetailByPharmacistId(@Param("pharmacistId") String pharmacistId);
+
     @Query("SELECT o FROM ConsultationOpinion o WHERE o.pharmacistId = :pharmacistId " +
            "AND o.submittedAt BETWEEN :startTime AND :endTime ORDER BY o.submittedAt DESC")
     List<ConsultationOpinion> findByPharmacistIdAndSubmittedAtBetween(

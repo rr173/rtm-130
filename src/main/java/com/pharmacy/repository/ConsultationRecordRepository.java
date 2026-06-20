@@ -20,6 +20,25 @@ public interface ConsultationRecordRepository extends JpaRepository<Consultation
 
     Optional<ConsultationRecord> findByPrescriptionNo(String prescriptionNo);
 
+    @Query("SELECT DISTINCT c FROM ConsultationRecord c " +
+           "LEFT JOIN FETCH c.opinions " +
+           "LEFT JOIN FETCH c.prescription " +
+           "WHERE c.id = :id")
+    Optional<ConsultationRecord> findDetailById(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT c FROM ConsultationRecord c " +
+           "LEFT JOIN FETCH c.opinions " +
+           "LEFT JOIN FETCH c.prescription " +
+           "WHERE c.prescriptionNo = :prescriptionNo")
+    Optional<ConsultationRecord> findDetailByPrescriptionNo(@Param("prescriptionNo") String prescriptionNo);
+
+    @Query("SELECT DISTINCT c FROM ConsultationRecord c " +
+           "LEFT JOIN FETCH c.opinions o " +
+           "LEFT JOIN FETCH c.prescription " +
+           "WHERE o.pharmacistId = :pharmacistId " +
+           "ORDER BY c.createdAt DESC")
+    List<ConsultationRecord> findDetailByParticipatingPharmacistId(@Param("pharmacistId") String pharmacistId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT c FROM ConsultationRecord c WHERE c.id = :id")
     Optional<ConsultationRecord> findByIdWithLock(@Param("id") Long id);

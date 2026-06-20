@@ -223,12 +223,15 @@ public class ConsultationService {
         int returnCount = voteCount.getOrDefault(ConsultationOpinionType.RETURN, 0);
         int keyAttentionCount = voteCount.getOrDefault(ConsultationOpinionType.KEY_ATTENTION, 0);
         int totalValid = validOpinions.size();
-        int majorityThreshold = totalValid / 2 + 1;
+        int majorityThreshold = totalValid > 0 ? totalValid / 2 + 1 : 0;
 
         ConsultationConclusion conclusion;
         StringBuilder summaryComments = new StringBuilder();
 
-        if (returnCount >= majorityThreshold) {
+        if (totalValid == 0) {
+            conclusion = ConsultationConclusion.RETURNED;
+            summaryComments.append("所有参与人均弃权，默认退回");
+        } else if (returnCount >= majorityThreshold) {
             conclusion = ConsultationConclusion.RETURNED;
             summaryComments.append("多数建议退回");
         } else if (approveCount >= majorityThreshold) {
@@ -239,9 +242,9 @@ public class ConsultationService {
             summaryComments.append("多数建议重点关注");
         } else {
             ConsultationOpinionType primaryType = primaryOpinion.getOpinionType();
-            if (primaryType == null) {
+            if (primaryType == null || Boolean.TRUE.equals(primaryOpinion.getIsAbstained())) {
                 conclusion = ConsultationConclusion.RETURNED;
-                summaryComments.append("票数相同且主审未投票，默认退回");
+                summaryComments.append("票数相同且主审弃权或未投票，默认退回");
             } else {
                 conclusion = switch (primaryType) {
                     case APPROVE -> ConsultationConclusion.PASSED;
@@ -268,13 +271,14 @@ public class ConsultationService {
         }
         consultationRecordRepository.save(consultation);
 
-        updatePrescriptionAfterConsultation(consultation, conclusion);
+        updatePrescriptionAfterConsultation(consultation, conclusion, opinions);
 
         log.info("会诊[{}]结论已生成: {}", consultation.getId(), conclusion.getDescription());
     }
 
     private void updatePrescriptionAfterConsultation(ConsultationRecord consultation,
-                                                      ConsultationConclusion conclusion) {
+                                                      ConsultationConclusion conclusion,
+                                                      List<ConsultationOpinion> opinions) {
         Prescription prescription = prescriptionRepository
                 .findByPrescriptionNoWithLock(consultation.getPrescriptionNo())
                 .orElse(null);
@@ -284,7 +288,7 @@ public class ConsultationService {
             return;
         }
 
-        ConsultationOpinion primaryOpinion = consultation.getOpinions().stream()
+        ConsultationOpinion primaryOpinion = opinions.stream()
                 .filter(o -> Boolean.TRUE.equals(o.getIsPrimary()))
                 .findFirst()
                 .orElse(null);
@@ -319,7 +323,7 @@ public class ConsultationService {
                 prescription.setReviewedByPharmacistName(consultation.getInitiatorPharmacistName());
                 prescription.setPharmacistReviewedAt(now);
 
-                String returnReason = consultation.getOpinions().stream()
+                String returnReason = opinions.stream()
                         .filter(o -> o.getOpinionType() == ConsultationOpinionType.RETURN
                                 && o.getReason() != null && !o.getReason().isEmpty())
                         .map(o -> o.getPharmacistName() + ": " + o.getReason())
@@ -334,7 +338,7 @@ public class ConsultationService {
                 prescription.setReviewedByPharmacistName(consultation.getInitiatorPharmacistName());
                 prescription.setPharmacistReviewedAt(now);
 
-                String attentionReason = consultation.getOpinions().stream()
+                String attentionReason = opinions.stream()
                         .filter(o -> o.getOpinionType() == ConsultationOpinionType.KEY_ATTENTION
                                 && o.getReason() != null && !o.getReason().isEmpty())
                         .map(o -> o.getPharmacistName() + ": " + o.getReason())
@@ -366,21 +370,24 @@ public class ConsultationService {
         return LocalDateTime.now().plusMinutes(minutes);
     }
 
+    @Transactional(readOnly = true)
     public ConsultationDetailDTO getConsultationDetail(Long consultationId) {
-        ConsultationRecord consultation = consultationRecordRepository.findById(consultationId)
+        ConsultationRecord consultation = consultationRecordRepository.findDetailById(consultationId)
                 .orElseThrow(() -> new ResourceNotFoundException("会诊不存在: " + consultationId));
         return convertToDetailDTO(consultation);
     }
 
+    @Transactional(readOnly = true)
     public ConsultationDetailDTO getConsultationByPrescriptionNo(String prescriptionNo) {
-        ConsultationRecord consultation = consultationRecordRepository.findByPrescriptionNo(prescriptionNo)
+        ConsultationRecord consultation = consultationRecordRepository.findDetailByPrescriptionNo(prescriptionNo)
                 .orElseThrow(() -> new ResourceNotFoundException("处方暂无会诊记录: " + prescriptionNo));
         return convertToDetailDTO(consultation);
     }
 
+    @Transactional(readOnly = true)
     public List<ConsultationTodoItemDTO> getMyTodoList(String pharmacistId) {
         List<ConsultationOpinion> opinions = consultationOpinionRepository
-                .findByPharmacistIdOrderByCreatedAtDesc(pharmacistId);
+                .findDetailByPharmacistId(pharmacistId);
 
         return opinions.stream()
                 .filter(o -> o.getSubmittedAt() == null && !Boolean.TRUE.equals(o.getIsAbstained()))
@@ -394,15 +401,17 @@ public class ConsultationService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public List<PharmacistConsultationHistoryDTO> getMyConsultationHistory(String pharmacistId) {
         List<ConsultationRecord> consultations = consultationRecordRepository
-                .findByParticipatingPharmacistId(pharmacistId);
+                .findDetailByParticipatingPharmacistId(pharmacistId);
 
         return consultations.stream()
                 .map(c -> convertToHistoryDTO(c, pharmacistId))
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public List<ConsultationStatisticsDTO> getStatisticsByDateRange(LocalDate startDate, LocalDate endDate) {
         LocalDateTime startTime = startDate.atStartOfDay();
         LocalDateTime endTime = endDate.atTime(23, 59, 59);
